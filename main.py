@@ -3,7 +3,7 @@ import yaml
 from loguru import logger
 from pathlib import Path
 
-from router import PDFRouter
+from router import PDFRouter  # Aynı klasördeyse bu import yeterli
 
 def load_config(config_path: str) -> dict:
     with open(config_path, 'r') as f:
@@ -29,6 +29,11 @@ def main():
     until_split      = cfg.get('until_split')            # name or int
     skip_existing    = bool(cfg.get('skip_existing', True))
     push_mode        = cfg.get('push_mode', 'overwrite') # or "append"
+    vlm_batch_size    = int(cfg.get("vlm_batch_size", 8))
+    buffer_size       = int(cfg.get("buffer_size", 256))
+    tps               = int(cfg.get("tensor_parallel_size", 2))
+    gpu_util          = float(cfg.get("gpu_memory_utilization", 0.7))
+    max_model_len     = int(cfg.get("max_model_len", 32000))
 
     if not ds_name or not output_ds_name:
         raise SystemExit("Config must include 'ds_name' and 'output_ds_name'.")
@@ -37,7 +42,12 @@ def main():
         model_name=model_name,
         debug=debug,
         use_vllm=use_vlm,
-        use_marker=use_marker
+        use_marker=use_marker,
+        tensor_parallel_size=tps,
+        gpu_memory_utilization=gpu_util,
+        max_model_len=max_model_len,
+        vlm_batch_size=vlm_batch_size,
+        buffer_size=buffer_size,
     )
 
     router.process_splits(
@@ -46,8 +56,8 @@ def main():
         start_from_split=start_from_split,
         until_split=until_split,
         limit=limit,
-        streaming=streaming,
-        num_proc=n_proc,
+        streaming=streaming,      # 🔴 önemli
+        num_proc=cfg.get("n_proc", 4),
         skip_existing=skip_existing,
         push_mode=push_mode,
     )
