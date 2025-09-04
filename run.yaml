@@ -1,0 +1,13 @@
+model_name: "Qwen/Qwen2.5-VL-32B-Instruct"
+ds_name: "orcn/predictions"
+debug: false
+batching: true
+use_vlm: true
+use_marker: true
+
+
+output_ds_name: "orcun/processed"
+n_proc: 8
+    
+skip_existing: true  
+push_mode: overwrite
