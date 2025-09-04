@@ -105,10 +105,10 @@ def get_splits(ds_name: str) -> Optional[List[str]]:
 # Marker Load Balancer (Round-robin, thread-safe)
 # -----------------------------
 MARKER_API_URLS = [
-    "http://0.0.0.0:8001/marker",
-    "http://0.0.0.0:8002/marker",
-    "http://0.0.0.0:8003/marker",
-    "http://0.0.0.0:8004/marker",
+    "http://127.0.0.1:8001/marker",
+    "http://127.0.0.1:8002/marker",
+    "http://127.0.0.1:8003/marker",
+    "http://127.0.0.1:8004/marker",
 ]
 
 class MarkerLoadBalancer:

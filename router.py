@@ -61,37 +61,49 @@ def predict_processor(labels):
     return ProcessorLabel.NOT_FOUND
 
 
-def send_to_marker(sample):
-    image = sample['images']
-    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
-    temp_filepath = temp_file.name
-    try:
-        image.save(temp_filepath, format="PNG")
-        post_data = {'filepath': temp_filepath}
-        marker_api_url = get_marker_api_url()
-        logger.debug(f"Sending to marker: {marker_api_url} | path: {temp_filepath}")
+import io, json, os, tempfile, logging
+import requests
+logger = logging.getLogger(__name__)
 
-        response = requests.post(
-            marker_api_url, data=json.dumps(post_data), headers={'Content-Type': 'application/json'}
-        )
+def send_to_marker(sample):
+    # sample['images'] -> muhtemelen PIL.Image.Image
+    image = sample['images']
+
+    # PNG'yi diske yazmadan bellekte hazırla
+    buf = io.BytesIO()
+    image.save(buf, format="PNG")
+    buf.seek(0)
+
+    marker_api_url = get_marker_api_url()
+    logger.debug("Sending to marker (multipart): %s | bytes=%d",
+                 marker_api_url, len(buf.getbuffer()))
+
+    try:
+        # Çoğu API alan adını "image" bekler; 422 gelirse "file" ile deneriz
+        files = {"image": ("page.png", buf, "image/png")}
+        headers = {"Accept": "application/json"}  # opsiyonel
+        response = requests.post(marker_api_url, files=files, headers=headers, timeout=(2, 60))
+
+        if response.status_code == 422:
+            # Alan adın farklı olabilir; "file" ile bir kez daha dene
+            buf.seek(0)
+            files = {"file": ("page.png", buf, "image/png")}
+            response = requests.post(marker_api_url, files=files, headers=headers, timeout=(2, 60))
+
         response.raise_for_status()
         result = response.json()
+
         out = result.get('output', '')
         if out == "":
-            logger.error("Marker couldn't dig any text")
+            logger.error("Marker couldn't dig any text (empty 'output')")
         return out
+
     except requests.exceptions.RequestException as e:
-        logger.error(f"Marker API request failed for path {temp_filepath}: {e}")
+        logger.error("Marker API request failed (multipart): %s", e)
         return ""
     except json.JSONDecodeError as e:
-        logger.error(f"Failed to decode JSON from Marker: {e}. Response: {response.text}")
+        logger.error("Failed to decode JSON from Marker: %s. Response: %s", e, getattr(response, "text", ""))
         return ""
-    finally:
-        temp_file.close()
-        if os.path.exists(temp_filepath):
-            os.remove(temp_filepath)
-
-
 def send_to_qwen_vl_25(sample):
     if _CLIENT is None:
         logger.warning("HTTP VLM client not initialized; skipping send_to_qwen_vl_25.")
