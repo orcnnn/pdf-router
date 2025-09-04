@@ -31,16 +31,21 @@ _MODEL_NAME = None
 _PROMPTS = None
 _DEBUG = False
 
-def _init_globals(model_name, debug=False):
+def _init_globals(model_name, debug=False, need_http_client=False):
     global _CLIENT, _MODEL_NAME, _PROMPTS, _DEBUG
-    _CLIENT = OpenAI(
-        base_url=os.environ.get("VLLM_API_URL"),
-        api_key=os.environ.get("VLLM_API_KEY"),
-        timeout=None
-    )
+    _CLIENT = None
+    if need_http_client:
+        base_url = os.environ.get("VLLM_API_URL")
+        api_key  = os.environ.get("VLLM_API_KEY") or os.environ.get("OPENAI_API_KEY")
+        if base_url and api_key:
+            _CLIENT = OpenAI(base_url=base_url, api_key=api_key, timeout=None)
+        else:
+            from loguru import logger
+            logger.warning("HTTP VLM client disabled: VLLM_API_URL veya API key bulunamadı.")
     _MODEL_NAME = model_name
     _PROMPTS = get_prompts()
     _DEBUG = debug
+
 
 def predict_processor(labels):
     if not isinstance(labels, list):
@@ -88,6 +93,9 @@ def send_to_marker(sample):
             os.remove(temp_filepath)
 
 def send_to_qwen_vl_25(sample):
+    if _CLIENT is None:
+        logger.warning("HTTP VLM client init edilmemiş; send_to_qwen_vl_25 atlanıyor.")
+        return ""
     logger.debug("Sending to VLM")
     try:
         buffered = BytesIO()
@@ -194,8 +202,10 @@ class PDFRouter:
         self.use_vllm = use_vllm
         if use_vllm:
             self.vlm = LLM(model_name, tensor_parallel_size=2, gpu_memory_utilization=0.8, max_model_len=60000)
+        # HTTP client sadece HTTP yolunu kullanacaksanız gerekli.
+        need_http_client = not self.use_vllm  # batched vLLM kullanıyorsanız False
+        _init_globals(model_name, debug, need_http_client=need_http_client)
 
-        _init_globals(model_name, debug)
         logger.info("PDFRouter initialized.")
 
     def process_splits(self, ds_name, output_ds_name, start_from_split=None, until_split=None,
