@@ -12,7 +12,7 @@ from loguru import logger
 from openai import OpenAI, APIConnectionError
 from datasets import get_dataset_config_names
 
-from .utils import (
+from utils import (
     get_prompts,
     get_marker_api_url,
     get_splits,
