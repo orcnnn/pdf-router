@@ -497,4 +497,3 @@ class PDFRouter:
                     logger.error(f"Push failed (arg error). Use DatasetDict push. Error: {e}")
                 except Exception as e:
                     logger.error(f"Push failed. Error: {e}")
-
