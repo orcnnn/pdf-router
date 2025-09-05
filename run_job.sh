@@ -7,9 +7,9 @@ sh start_marker_1.sh
 echo "Marker servers started. Sleeping for 200 seconds..."
 sleep 200
 
-sh start_vllm.sh
+sbatch start_vllm_server.sh
 echo "VLLM servers started. Sleeping for 800 seconds..."
-sleep 800
+sleep 1000
 
 
 
