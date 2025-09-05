@@ -1,31 +1,70 @@
+#!/bin/bash
 
-export VLLM_API_URL="http://10.128.41.141:8000/v1"   
-export VLLM_API_KEY="dummy"
-# Eski süreçleri kapat
-pkill -f "vllm serve" 2>/dev/null
+#SBATCH -J "vllm"                         # isin adi
 
-# (İsteğe bağlı) P2P cache'i temizle (yeniden ölçsün)
-rm -f ~/.cache/vllm/gpu_p2p_access_cache_for_0,1,2,3.json
+#SBATCH -A sdmmtv                           # account / proje adi
+#SBATCH -p a100x4q                        # kuyruk (partition/queue) adi
 
-# Ortam
-export CUDA_VISIBLE_DEVICES=0,1,2,3
-export VLLM_WORKER_MULTIPROC_METHOD=spawn
-# "expandable_segments" bu makinada desteklenmiyor uyarısı veriyor; kaldırıyoruz:
-unset PYTORCH_CUDA_ALLOC_CONF
+#SBATCH -n 64                            # cekirdek / islemci sayisi
+#SBATCH -N 1                              # bilgisayar sayisi
+#SBATCH --gres=gpu:4                    # ilave kaynak (1 gpu gerekli)
+#SBATCH -o logs/%j_run.log                 # Output file path
 
-# Sunucu (eager + custom all-reduce kapalı)
+set -euo pipefail
+
+# Slurm submit klasörüne geç (paylaşımlı fs varsayımı)
+cd "${SLURM_SUBMIT_DIR:-$PWD}"
+
+PORT="${PORT:-8000}"
+LOG_DIR="${LOG_DIR:-logs}"
+mkdir -p "$LOG_DIR"
+LOG_FILE="${LOG_DIR}/vllm_server_${SLURM_JOB_ID}.log"
+
+echo "[INFO] Launching vLLM on port ${PORT}, logging to ${LOG_FILE}"
+
+# ---- VLLM SUNUCUYU BAŞLAT (KENDİ ARGÜMANLARINLA) ----
+# ÖRNEK: argümanları kendine göre uyarlayabilirsin
 vllm serve Qwen/Qwen2.5-VL-32B-Instruct \
   --trust-remote-code \
-  --host 0.0.0.0 --port 8000 \
+  --host 0.0.0.0 --port "${PORT}" \
   --tensor-parallel-size 4 \
   --distributed-executor-backend mp \
   --dtype bfloat16 \
   --enable-chunked-prefill \
   --max-model-len 16384 \
-  --max-num-seqs 4 \
+  --max-num-seqs 2 \
   --gpu-memory-utilization 0.90 \
-  --swap-space 24 \
+  --swap-space 16 \
   --disable-custom-all-reduce \
   --enforce-eager \
-  > logs/vllm_server.log 2>&1 & disown
+  > "${LOG_FILE}" 2>&1 &
+
+VLLM_PID=$!
+echo "${VLLM_PID}" > "${LOG_DIR}/vllm_${SLURM_JOB_ID}.pid"
+echo "[INFO] vLLM PID=${VLLM_PID}"
+
+# ---- HAZIRLIK/GÖZETLEYİCİ: PORT AÇILINCA ENDPOINT JSON YAZ ----
+(
+  for i in {1..240}; do
+    if ss -ltn | awk '{print $4}' | grep -q ":${PORT}\$"; then
+      HOST=$(hostname -f)
+      IP=$(ip -4 route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}')
+      URL="http://${HOST}:${PORT}/v1"
+
+      EP_FILE="${SLURM_SUBMIT_DIR:-$PWD}/vllm_endpoint_${SLURM_JOB_ID}.json"
+      printf '{"host":"%s","ip":"%s","port":%s,"url":"%s","job_id":"%s","pid":%s}\n' \
+             "$HOST" "$IP" "$PORT" "$URL" "$SLURM_JOB_ID" "$VLLM_PID" > "$EP_FILE"
+      ln -sf "$EP_FILE" "${SLURM_SUBMIT_DIR:-$PWD}/vllm_endpoint_latest.json"
+
+      echo "[INFO] Endpoint file written: ${EP_FILE}"
+      exit 0
+    fi
+    sleep 1
+  done
+  echo "[WARN] vLLM port ${PORT} did not open in time; no endpoint file written."
+  exit 1
+) &
+
+# ---- JOB'U vLLM'YE BAĞLA (vLLM kapanınca job biter) ----
+wait "${VLLM_PID}"
 

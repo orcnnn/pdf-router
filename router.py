@@ -61,49 +61,93 @@ def predict_processor(labels):
     return ProcessorLabel.NOT_FOUND
 
 
-import io, json, os, tempfile, logging
-import requests
-logger = logging.getLogger(__name__)
+import io, json, base64, logging, requests
+logger = logging.getLogger("router")
 
-def send_to_marker(sample):
-    # sample['images'] -> muhtemelen PIL.Image.Image
-    image = sample['images']
+CANDIDATE_PATHS = ["/marker", "/predict", "/extract", "/process", "/"]
+CANDIDATE_FIELDS = ["image", "file", "image_file"]
 
-    # PNG'yi diske yazmadan bellekte hazırla
+def send_to_marker(sample, base_url=None, timeout_connect=2, timeout_read=120):
+    image = sample["images"]  # PIL.Image.Image
     buf = io.BytesIO()
     image.save(buf, format="PNG")
-    buf.seek(0)
+    png_bytes = buf.getvalue()
 
-    marker_api_url = get_marker_api_url()
-    logger.debug("Sending to marker (multipart): %s | bytes=%d",
-                 marker_api_url, len(buf.getbuffer()))
+    # Eğer get_marker_api_url sadece base döndürüyorsa burada birleşiriz.
+    if base_url is None:
+        base_url = get_marker_api_url()  # Örn: "http://127.0.0.1:8001" (SONUNA path ekleyeceğiz)
 
-    try:
-        # Çoğu API alan adını "image" bekler; 422 gelirse "file" ile deneriz
-        files = {"image": ("page.png", buf, "image/png")}
-        headers = {"Accept": "application/json"}  # opsiyonel
-        response = requests.post(marker_api_url, files=files, headers=headers, timeout=(2, 60))
+    # 1) Multipart (farklı path+field kombinasyonları)
+    for path in CANDIDATE_PATHS:
+        url = base_url.rstrip("/") + path
+        for field in CANDIDATE_FIELDS:
+            files = {field: ("page.png", io.BytesIO(png_bytes), "image/png")}
+            try:
+                r = requests.post(
+                    url,
+                    files=files,
+                    headers={"Accept": "application/json"},
+                    timeout=(timeout_connect, timeout_read),
+                )
+            except requests.exceptions.RequestException as e:
+                logger.error("Marker %s %s request error: %s", url, field, e)
+                continue
 
-        if response.status_code == 422:
-            # Alan adın farklı olabilir; "file" ile bir kez daha dene
-            buf.seek(0)
-            files = {"file": ("page.png", buf, "image/png")}
-            response = requests.post(marker_api_url, files=files, headers=headers, timeout=(2, 60))
+            if r.ok:
+                try:
+                    result = r.json()
+                except json.JSONDecodeError:
+                    logger.error("JSON decode failed (path=%s field=%s): %s", path, field, r.text[:800])
+                    continue
 
-        response.raise_for_status()
-        result = response.json()
+                # Çeşitli anahtar ihtimalleri
+                out = result.get("output") or result.get("text") or result.get("result") or ""
+                if not out:
+                    logger.error("Marker returned empty text (path=%s field=%s). Body: %s",
+                                 path, field, r.text[:800])
+                return out
 
-        out = result.get('output', '')
-        if out == "":
-            logger.error("Marker couldn't dig any text (empty 'output')")
-        return out
+            # Hataları görünür kıl
+            logger.error("Marker %s %s -> %s\n%s",
+                         url, field, r.status_code, r.text[:800])
 
-    except requests.exceptions.RequestException as e:
-        logger.error("Marker API request failed (multipart): %s", e)
-        return ""
-    except json.JSONDecodeError as e:
-        logger.error("Failed to decode JSON from Marker: %s. Response: %s", e, getattr(response, "text", ""))
-        return ""
+            # 404/405/422 ise başka kombinasyon denemeye devam; 5xx ise path bazında kesmek isteyebilirsin
+            if r.status_code >= 500:
+                # Sunucu crash — diğer path’e geçelim
+                break
+
+    # 2) Base64 JSON fallback (bazı sürümler image_base64 bekliyor)
+    b64 = base64.b64encode(png_bytes).decode()
+    for path in CANDIDATE_PATHS:
+        url = base_url.rstrip("/") + path
+        try:
+            r = requests.post(
+                url,
+                json={"image_base64": b64},
+                headers={"Accept": "application/json"},
+                timeout=(timeout_connect, timeout_read),
+            )
+        except requests.exceptions.RequestException as e:
+            logger.error("Marker %s base64 request error: %s", url, e)
+            continue
+
+        if r.ok:
+            try:
+                result = r.json()
+            except json.JSONDecodeError:
+                logger.error("JSON decode failed (base64 path=%s): %s", path, r.text[:800])
+                continue
+
+            out = result.get("output") or result.get("text") or result.get("result") or ""
+            if not out:
+                logger.error("Marker returned empty text (base64 path=%s). Body: %s",
+                             path, r.text[:800])
+            return out
+
+        logger.error("Marker %s base64 -> %s\n%s", url, r.status_code, r.text[:800])
+
+    # Her şey başarısız olursa
+    return ""
 def send_to_qwen_vl_25(sample):
     if _CLIENT is None:
         logger.warning("HTTP VLM client not initialized; skipping send_to_qwen_vl_25.")
