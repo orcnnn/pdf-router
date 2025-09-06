@@ -32,14 +32,27 @@ class MarkerClient:
 
     # ---------------------- public ----------------------
     def call_with_png_bytes(self, png_bytes: bytes) -> str:
+        log.info(f"Calling Marker with {len(png_bytes)} bytes of PNG data")
+        
         if self._resolved_url is None or self._payload_fn is None:
+            log.info("Auto-discovering Marker endpoint and payload strategy...")
             self._auto_discover(png_bytes)
+            
         if self._resolved_url is None or self._payload_fn is None:
+            log.error("Failed to discover Marker endpoint/payload strategy")
             return ""
+            
+        log.info(f"Using discovered strategy: {self._payload_fn.__name__}")
+        log.info(f"Target URL: {self._resolved_url}")
+        
         try:
-            return self._payload_fn(png_bytes) or ""
+            result = self._payload_fn(png_bytes) or ""
+            log.info(f"Marker call successful, result length: {len(result)}")
+            log.debug(f"Marker result preview: {result[:200] if result else 'Empty'}...")
+            return result
         except Exception as e:
             log.error("Marker call failed on cached strategy: %s", e)
+            log.exception("Full traceback:")
             return ""
 
     # ---------------------- discovery ----------------------

@@ -34,30 +34,52 @@ _DEBUG = False
 def _init_globals(model_name, debug=False, need_http_client=False):
     global _CLIENT, _MODEL_NAME, _PROMPTS, _DEBUG
     _CLIENT = None
+    logger.info(f"Initializing globals - model_name: {model_name}, debug: {debug}, need_http_client: {need_http_client}")
+    
     if need_http_client:
         base_url = os.getenv("VLLM_API_URL")
         api_key = os.getenv("VLLM_API_KEY") or os.getenv("OPENAI_API_KEY")
+        logger.info(f"HTTP client setup - base_url: {base_url}, api_key: {'***' if api_key else 'None'}")
+        
         if base_url and api_key:
             _CLIENT = OpenAI(base_url=base_url, api_key=api_key, timeout=None)
+            logger.success("HTTP VLM client initialized successfully")
         else:
-            logger.warning("HTTP VLM client disabled: VLLM_API_URL or API key is missing.")
+            logger.error("HTTP VLM client disabled: VLLM_API_URL or API key is missing.")
+            logger.error(f"VLLM_API_URL: {base_url}")
+            logger.error(f"API_KEY available: {bool(api_key)}")
+    else:
+        logger.info("HTTP client not needed - using local vLLM")
+        
     _MODEL_NAME = model_name
     _PROMPTS = get_prompts()
     _DEBUG = debug
+    logger.info(f"Globals initialized - MODEL_NAME: {_MODEL_NAME}, PROMPTS loaded: {bool(_PROMPTS)}")
 
 
 def predict_processor(labels):
+    logger.debug(f"Predicting processor for labels: {labels}")
+    
     if not isinstance(labels, list):
+        logger.warning(f"Labels is not a list: {type(labels)}")
         return ProcessorLabel.NOT_FOUND
+        
     class_labels = {l['class'] for l in labels if isinstance(l, dict) and 'class' in l}
+    logger.debug(f"Extracted class labels: {class_labels}")
 
     if "İçindekiler" in class_labels:
+        logger.info("Content type: İçindekiler -> NOT_FOUND")
         return ProcessorLabel.NOT_FOUND
 
     if "Tablo" in class_labels or "Soru" in class_labels or "Metin" in class_labels:
+        logger.info(f"Content type: {class_labels} -> MARKER")
         return ProcessorLabel.MARKER
+        
     if "Resim/Tablo Açıklaması" in class_labels or "Resim" in class_labels or "Kapak Sayfası" in class_labels:
+        logger.info(f"Content type: {class_labels} -> QWEN_VL_25")
         return ProcessorLabel.QWEN_VL_25
+        
+    logger.info(f"Content type: {class_labels} -> NOT_FOUND (no matching classes)")
     return ProcessorLabel.NOT_FOUND
 
 
@@ -68,14 +90,22 @@ CANDIDATE_PATHS = ["/marker", "/predict", "/extract", "/process", "/"]
 CANDIDATE_FIELDS = ["image", "file", "image_file"]
 
 def send_to_qwen_vl_25(sample):
+    logger.info("Starting VLM processing...")
+    
     if _CLIENT is None:
-        logger.warning("HTTP VLM client not initialized; skipping send_to_qwen_vl_25.")
+        logger.error("HTTP VLM client not initialized; skipping send_to_qwen_vl_25.")
         return ""
-    logger.debug("Sending to VLM")
+        
+    logger.info(f"VLM client available, model: {_MODEL_NAME}")
+    
     try:
+        logger.debug("Converting image to PNG...")
         buffered = BytesIO()
         sample['images'].save(buffered, format="PNG")
         img_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
+        logger.debug(f"Image converted, size: {len(img_str)} characters")
+        
+        logger.info("Sending request to VLM API...")
         response = _CLIENT.chat.completions.create(
             model=_MODEL_NAME,
             temperature=0,
@@ -87,62 +117,106 @@ def send_to_qwen_vl_25(sample):
                 ]}
             ]
         )
-        return response.choices[0].message.content
+        
+        result = response.choices[0].message.content
+        logger.success(f"VLM processing completed, result length: {len(result) if result else 0}")
+        logger.debug(f"VLM result preview: {result[:200] if result else 'Empty'}...")
+        return result
+        
     except APIConnectionError as e:
         logger.error(f"Could not connect to VLM API: {e}")
         return ""
     except Exception as e:
         logger.error(f"An unexpected error in send_to_qwen_vl_25: {e}")
+        logger.exception("Full traceback:")
         return ""
 
 
 from router_marker import send_to_marker
 def send_to_marker_map(sample):
-    sample['text'] = marker_text_postprocessing(send_to_marker(sample))
+    logger.info("Processing sample with Marker...")
+    raw_text = send_to_marker(sample)
+    logger.debug(f"Marker raw output length: {len(raw_text) if raw_text else 0}")
+    
+    processed_text = marker_text_postprocessing(raw_text)
+    logger.info(f"Marker processing completed, final text length: {len(processed_text) if processed_text else 0}")
+    logger.debug(f"Marker result preview: {processed_text[:200] if processed_text else 'Empty'}...")
+    
+    sample['text'] = processed_text
     return sample
 
 
 def send_to_qwen_vl_25_map(sample):
-    sample['text'] = vlm_text_postprocessing(send_to_qwen_vl_25(sample))
+    logger.info("Processing sample with VLM...")
+    raw_text = send_to_qwen_vl_25(sample)
+    logger.debug(f"VLM raw output length: {len(raw_text) if raw_text else 0}")
+    
+    processed_text = vlm_text_postprocessing(raw_text)
+    logger.info(f"VLM processing completed, final text length: {len(processed_text) if processed_text else 0}")
+    logger.debug(f"VLM result preview: {processed_text[:200] if processed_text else 'Empty'}...")
+    
+    sample['text'] = processed_text
     return sample
 
 
 def predict_processor_map(sample):
+    logger.debug(f"Processing sample for classification: {type(sample)}")
+    
     try:
         # Row dict değilse; string ise JSON parse etmeyi dene, değilse sar
         if not isinstance(sample, dict):
+            logger.debug(f"Sample is not dict, converting...")
             if isinstance(sample, str):
                 try:
                     parsed = json.loads(sample)
                     sample = {"predictions": parsed}
-                except Exception:
+                    logger.debug("Successfully parsed string sample as JSON")
+                except Exception as e:
+                    logger.debug(f"Failed to parse string as JSON: {e}")
                     sample = {"predictions": sample}
             else:
+                logger.debug(f"Sample type {type(sample)} not supported, setting predictions to None")
                 sample = {"predictions": None}
 
         predictions_col = sample.get('predictions')
+        logger.debug(f"Predictions column type: {type(predictions_col)}")
+        
         labels_list = []
         if not predictions_col:
+            logger.warning("No predictions column found, setting processor to NOT_FOUND")
             sample['processor'] = ProcessorLabel.NOT_FOUND.value
             return sample
 
         data = json.loads(predictions_col) if isinstance(predictions_col, str) else predictions_col
+        logger.debug(f"Parsed data type: {type(data)}")
+        
         if isinstance(data, dict):
             labels_list = data.get('labels', [])
+            logger.debug(f"Extracted labels from dict: {len(labels_list)} items")
         elif isinstance(data, list):
             labels_list = data
+            logger.debug(f"Using data as labels list: {len(labels_list)} items")
         else:
+            logger.warning(f"Unexpected data type: {type(data)}")
             labels_list = []
 
+        # Filter by confidence
+        original_count = len(labels_list)
         labels_list = [l for l in labels_list if isinstance(l, dict) and float(l.get('confidence', 0.0)) > 0.9]
-        sample['processor'] = predict_processor(labels_list).value
+        logger.debug(f"Filtered labels by confidence > 0.9: {original_count} -> {len(labels_list)}")
+        
+        processor = predict_processor(labels_list)
+        sample['processor'] = processor.value
+        logger.info(f"Sample classified as: {processor.name} ({processor.value})")
+        
     except (json.JSONDecodeError, TypeError, ValueError) as e:
         # sample burada dict olduğuna emin değilsek, korumalı erişelim
         try:
             bad_val = sample.get('predictions') if isinstance(sample, dict) else str(sample)[:200]
         except Exception:
             bad_val = "<unrepr>"
-        logger.warning(f"Could not parse predictions column. Error: {e}. Data: {bad_val}. Setting processor to NOT_FOUND.")
+        logger.error(f"Could not parse predictions column. Error: {e}. Data: {bad_val}. Setting processor to NOT_FOUND.")
+        logger.exception("Full traceback:")
         sample = sample if isinstance(sample, dict) else {}
         sample['processor'] = ProcessorLabel.NOT_FOUND.value
     return sample
@@ -189,6 +263,19 @@ class PDFRouter:
     def __init__(self, model_name, debug=False, use_vllm=True, use_marker=True,
                  tensor_parallel_size=2, gpu_memory_utilization=0.7, max_model_len=32000,
                  vlm_batch_size=8, buffer_size=256):
+        logger.info("=" * 60)
+        logger.info("INITIALIZING PDF ROUTER")
+        logger.info("=" * 60)
+        logger.info(f"Model name: {model_name}")
+        logger.info(f"Debug mode: {debug}")
+        logger.info(f"Use VLM: {use_vllm}")
+        logger.info(f"Use Marker: {use_marker}")
+        logger.info(f"Tensor parallel size: {tensor_parallel_size}")
+        logger.info(f"GPU memory utilization: {gpu_memory_utilization}")
+        logger.info(f"Max model length: {max_model_len}")
+        logger.info(f"VLM batch size: {vlm_batch_size}")
+        logger.info(f"Buffer size: {buffer_size}")
+        
         self.model_name = model_name
         self.debug = debug
         self.use_marker = use_marker
@@ -196,26 +283,33 @@ class PDFRouter:
         self.vlm_batch_size = vlm_batch_size
         self.buffer_size = buffer_size
 
-
         if self.use_marker:
+            logger.info("Initializing Marker client...")
+            marker_url = get_marker_api_url()
+            logger.info(f"Marker API URL: {marker_url}")
             # MARKER_API_URL tam endpoint ise (örn "...:8003/marker") prefer_endpoint='exact' seçebilirsin.
             init_marker_client(
-                base_url=get_marker_api_url(),      # env'den geliyor
+                base_url=marker_url,      # env'den geliyor
                 prefer_endpoint="auto",             # 'exact' yaparsan ek path denenmez
                 prefer_payload="auto"               # istersen 'json:filepath' zorunlu kıl
             )
+            logger.success("Marker client initialized")
 
         if use_vllm:
+            logger.info("Initializing local vLLM...")
             self.vlm = LLM(
                 model_name,
                 tensor_parallel_size=tensor_parallel_size,
                 gpu_memory_utilization=gpu_memory_utilization,
                 max_model_len=max_model_len
             )
+            logger.success("Local vLLM initialized")
 
         need_http_client = not self.use_vllm
+        logger.info(f"HTTP client needed: {need_http_client}")
         _init_globals(model_name, debug, need_http_client=need_http_client)
-        logger.info("PDFRouter initialized.")
+        logger.success("PDFRouter initialization completed!")
+        logger.info("=" * 60)
 
     def process_splits(self, ds_name, output_ds_name, start_from_split=None, until_split=None,
                        limit=None, streaming=False, num_proc=2, skip_existing=True, push_mode="overwrite"):

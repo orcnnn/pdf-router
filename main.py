@@ -14,7 +14,13 @@ def main():
     parser.add_argument('config', help='Path to YAML configuration file')
     args = parser.parse_args()
 
+    logger.info("=" * 80)
+    logger.info("PDF ROUTER STARTING")
+    logger.info("=" * 80)
+    logger.info(f"Config file: {args.config}")
+
     cfg = load_config(args.config)
+    logger.info(f"Configuration loaded successfully")
 
     model_name       = cfg.get('model_name', 'Qwen/Qwen2.5-VL-32B-Instruct')
     ds_name          = cfg.get('ds_name')
@@ -35,9 +41,30 @@ def main():
     gpu_util          = float(cfg.get("gpu_memory_utilization", 0.7))
     max_model_len     = int(cfg.get("max_model_len", 32000))
 
+    logger.info("CONFIGURATION SUMMARY:")
+    logger.info(f"  Model name: {model_name}")
+    logger.info(f"  Input dataset: {ds_name}")
+    logger.info(f"  Output dataset: {output_ds_name}")
+    logger.info(f"  Debug mode: {debug}")
+    logger.info(f"  Use VLM: {use_vlm}")
+    logger.info(f"  Use Marker: {use_marker}")
+    logger.info(f"  Streaming: {streaming}")
+    logger.info(f"  Limit: {limit}")
+    logger.info(f"  Start from split: {start_from_split}")
+    logger.info(f"  Until split: {until_split}")
+    logger.info(f"  Skip existing: {skip_existing}")
+    logger.info(f"  Push mode: {push_mode}")
+    logger.info(f"  VLM batch size: {vlm_batch_size}")
+    logger.info(f"  Buffer size: {buffer_size}")
+    logger.info(f"  Tensor parallel size: {tps}")
+    logger.info(f"  GPU utilization: {gpu_util}")
+    logger.info(f"  Max model length: {max_model_len}")
+
     if not ds_name or not output_ds_name:
+        logger.error("Configuration error: 'ds_name' and 'output_ds_name' are required")
         raise SystemExit("Config must include 'ds_name' and 'output_ds_name'.")
 
+    logger.info("Creating PDFRouter instance...")
     router = PDFRouter(
         model_name=model_name,
         debug=debug,
@@ -50,6 +77,7 @@ def main():
         buffer_size=buffer_size,
     )
 
+    logger.info("Starting dataset processing...")
     router.process_splits(
         ds_name=ds_name,
         output_ds_name=output_ds_name,
@@ -61,6 +89,8 @@ def main():
         skip_existing=skip_existing,
         push_mode=push_mode,
     )
+    logger.success("PDF Router processing completed!")
+    logger.info("=" * 80)
 
 if __name__ == "__main__":
     main()
