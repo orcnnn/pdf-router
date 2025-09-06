@@ -127,7 +127,14 @@ class MarkerClient:
             with tempfile.NamedTemporaryFile(suffix=".png", delete=True) as tmp:
                 tmp.write(png)
                 tmp.flush()
-                payload = {"filepath": tmp.name}
+                payload = {
+                    "filepath": tmp.name,
+                    "page_range": None,
+                    "languages": None,
+                    "force_ocr": True,
+                    "paginate_output": False,
+                    "output_format": "markdown"
+                }
                 r = requests.post(url, json=payload,
                                   headers={"Accept": "application/json"},
                                   timeout=self.timeout)
