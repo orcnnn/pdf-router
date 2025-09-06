@@ -67,87 +67,6 @@ logger = logging.getLogger("router")
 CANDIDATE_PATHS = ["/marker", "/predict", "/extract", "/process", "/"]
 CANDIDATE_FIELDS = ["image", "file", "image_file"]
 
-def send_to_marker(sample, base_url=None, timeout_connect=2, timeout_read=120):
-    image = sample["images"]  # PIL.Image.Image
-    buf = io.BytesIO()
-    image.save(buf, format="PNG")
-    png_bytes = buf.getvalue()
-
-    # Eğer get_marker_api_url sadece base döndürüyorsa burada birleşiriz.
-    if base_url is None:
-        base_url = get_marker_api_url()  # Örn: "http://127.0.0.1:8001" (SONUNA path ekleyeceğiz)
-
-    # 1) Multipart (farklı path+field kombinasyonları)
-    for path in CANDIDATE_PATHS:
-        url = base_url.rstrip("/") + path
-        for field in CANDIDATE_FIELDS:
-            files = {field: ("page.png", io.BytesIO(png_bytes), "image/png")}
-            try:
-                r = requests.post(
-                    url,
-                    files=files,
-                    headers={"Accept": "application/json"},
-                    timeout=(timeout_connect, timeout_read),
-                )
-            except requests.exceptions.RequestException as e:
-                logger.error("Marker %s %s request error: %s", url, field, e)
-                continue
-
-            if r.ok:
-                try:
-                    result = r.json()
-                except json.JSONDecodeError:
-                    logger.error("JSON decode failed (path=%s field=%s): %s", path, field, r.text[:800])
-                    continue
-
-                # Çeşitli anahtar ihtimalleri
-                out = result.get("output") or result.get("text") or result.get("result") or ""
-                if not out:
-                    logger.error("Marker returned empty text (path=%s field=%s). Body: %s",
-                                 path, field, r.text[:800])
-                return out
-
-            # Hataları görünür kıl
-            logger.error("Marker %s %s -> %s\n%s",
-                         url, field, r.status_code, r.text[:800])
-
-            # 404/405/422 ise başka kombinasyon denemeye devam; 5xx ise path bazında kesmek isteyebilirsin
-            if r.status_code >= 500:
-                # Sunucu crash — diğer path’e geçelim
-                break
-
-    # 2) Base64 JSON fallback (bazı sürümler image_base64 bekliyor)
-    b64 = base64.b64encode(png_bytes).decode()
-    for path in CANDIDATE_PATHS:
-        url = base_url.rstrip("/") + path
-        try:
-            r = requests.post(
-                url,
-                json={"image_base64": b64},
-                headers={"Accept": "application/json"},
-                timeout=(timeout_connect, timeout_read),
-            )
-        except requests.exceptions.RequestException as e:
-            logger.error("Marker %s base64 request error: %s", url, e)
-            continue
-
-        if r.ok:
-            try:
-                result = r.json()
-            except json.JSONDecodeError:
-                logger.error("JSON decode failed (base64 path=%s): %s", path, r.text[:800])
-                continue
-
-            out = result.get("output") or result.get("text") or result.get("result") or ""
-            if not out:
-                logger.error("Marker returned empty text (base64 path=%s). Body: %s",
-                             path, r.text[:800])
-            return out
-
-        logger.error("Marker %s base64 -> %s\n%s", url, r.status_code, r.text[:800])
-
-    # Her şey başarısız olursa
-    return ""
 def send_to_qwen_vl_25(sample):
     if _CLIENT is None:
         logger.warning("HTTP VLM client not initialized; skipping send_to_qwen_vl_25.")
@@ -177,6 +96,7 @@ def send_to_qwen_vl_25(sample):
         return ""
 
 
+from router_marker import send_to_marker
 def send_to_marker_map(sample):
     sample['text'] = marker_text_postprocessing(send_to_marker(sample))
     return sample
@@ -263,7 +183,8 @@ def generate_responses(llm: LLM, prompts, images, temperature=0.2, max_tokens=20
 
     return generated_texts
 
-
+from utils import get_marker_api_url
+from router_marker import init_marker_client
 class PDFRouter:
     def __init__(self, model_name, debug=False, use_vllm=True, use_marker=True,
                  tensor_parallel_size=2, gpu_memory_utilization=0.7, max_model_len=32000,
@@ -274,6 +195,15 @@ class PDFRouter:
         self.use_vllm = use_vllm
         self.vlm_batch_size = vlm_batch_size
         self.buffer_size = buffer_size
+
+
+        if self.use_marker:
+            # MARKER_API_URL tam endpoint ise (örn "...:8003/marker") prefer_endpoint='exact' seçebilirsin.
+            init_marker_client(
+                base_url=get_marker_api_url(),      # env'den geliyor
+                prefer_endpoint="auto",             # 'exact' yaparsan ek path denenmez
+                prefer_payload="auto"               # istersen 'json:filepath' zorunlu kıl
+            )
 
         if use_vllm:
             self.vlm = LLM(
