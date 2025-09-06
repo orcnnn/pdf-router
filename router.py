@@ -43,7 +43,7 @@ def _init_globals(model_name, debug=False, need_http_client=False):
         
         if base_url and api_key:
             _CLIENT = OpenAI(base_url=base_url, api_key=api_key, timeout=None)
-            logger.success("HTTP VLM client initialized successfully")
+            logger.info("✅ HTTP VLM client initialized successfully")
         else:
             logger.error("HTTP VLM client disabled: VLLM_API_URL or API key is missing.")
             logger.error(f"VLLM_API_URL: {base_url}")
@@ -119,7 +119,7 @@ def send_to_qwen_vl_25(sample):
         )
         
         result = response.choices[0].message.content
-        logger.success(f"VLM processing completed, result length: {len(result) if result else 0}")
+        logger.info(f"✅ VLM processing completed, result length: {len(result) if result else 0}")
         logger.debug(f"VLM result preview: {result[:200] if result else 'Empty'}...")
         return result
         
@@ -293,7 +293,7 @@ class PDFRouter:
                 prefer_endpoint="auto",             # 'exact' yaparsan ek path denenmez
                 prefer_payload="auto"               # istersen 'json:filepath' zorunlu kıl
             )
-            logger.success("Marker client initialized")
+            logger.info("✅ Marker client initialized")
 
         if use_vllm:
             logger.info("Initializing local vLLM...")
@@ -303,12 +303,12 @@ class PDFRouter:
                 gpu_memory_utilization=gpu_memory_utilization,
                 max_model_len=max_model_len
             )
-            logger.success("Local vLLM initialized")
+            logger.info("✅ Local vLLM initialized")
 
         need_http_client = not self.use_vllm
         logger.info(f"HTTP client needed: {need_http_client}")
         _init_globals(model_name, debug, need_http_client=need_http_client)
-        logger.success("PDFRouter initialization completed!")
+        logger.info("✅ PDFRouter initialization completed!")
         logger.info("=" * 60)
 
     def process_splits(self, ds_name, output_ds_name, start_from_split=None, until_split=None,
@@ -434,7 +434,7 @@ class PDFRouter:
                 final_ds = processed[0] if len(processed) == 1 else datasets.concatenate_datasets(processed)
 
                 duration = (time.time() - start_time) / 60
-                logger.success(f"Successfully processed split '{split_name}' in {duration:.2f} minutes.")
+                logger.info(f"✅ Successfully processed split '{split_name}' in {duration:.2f} minutes.")
 
                 try:
                     if push_mode == "append":
@@ -458,7 +458,7 @@ class PDFRouter:
                     else:
                         datasets.DatasetDict({split_name: final_ds}).push_to_hub(repo_id=output_ds_name, private=False)
 
-                    logger.success(f"Successfully pushed '{split_name}'.")
+                    logger.info(f"✅ Successfully pushed '{split_name}'.")
                 except TypeError as e:
                     logger.error(f"Push failed (arg error). Use DatasetDict push. Error: {e}")
                 except Exception as e:
@@ -560,7 +560,7 @@ class PDFRouter:
                         datasets.DatasetDict({split_name: final_ds}).push_to_hub(repo_id=output_ds_name, private=False)
 
                     duration = (time.time() - start_time) / 60
-                    logger.success(f"Successfully processed (stream) and pushed split '{split_name}' in {duration:.2f} minutes.")
+                    logger.info(f"✅ Successfully processed (stream) and pushed split '{split_name}' in {duration:.2f} minutes.")
                 except TypeError as e:
                     logger.error(f"Push failed (arg error). Use DatasetDict push. Error: {e}")
                 except Exception as e:

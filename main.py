@@ -89,7 +89,7 @@ def main():
         skip_existing=skip_existing,
         push_mode=push_mode,
     )
-    logger.success("PDF Router processing completed!")
+    logger.info("✅ PDF Router processing completed!")
     logger.info("=" * 80)
 
 if __name__ == "__main__":
