@@ -3,7 +3,7 @@ ds_name: "orcn/predictions"
 output_ds_name: "sghosts/orcun_processed"
 
 # işleme seçenekleri
-use_vlm: true
+use_vlm: false
 use_marker: true
 debug: false
 
