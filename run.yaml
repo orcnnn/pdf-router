@@ -11,7 +11,7 @@ debug: false
 streaming: true          # 🔴 kritik
 skip_existing: true      # çıktıdaki mevcut split'leri atla
 push_mode: overwrite     # split bitince tek commit
-limit: null              # sınırlama yok (ama stream ederek)
+limit: 5                 # TEST: sadece 5 sample işle
 
 # performans/ram ayarları
 vlm_batch_size: 8        # VLM'e mini-batch
