@@ -13,12 +13,6 @@ Bu proje, PDF sayfalarını içerik türüne göre otomatik olarak sınıflandı
 
 ## 📋 Gereksinimler
 
-### Sistem Gereksinimleri
-- Python 3.8+
-- CUDA destekli GPU (Marker ve vLLM için)
-- En az 4GB GPU RAM (önerilen: 8GB+)
-- Yeterli disk alanı (geçici dosyalar için)
-
 ### Python Paketleri
 ```bash
 pip install -r requirements.txt
