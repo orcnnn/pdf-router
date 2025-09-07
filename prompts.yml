@@ -42,4 +42,4 @@ system_prompt_1: |
   - Do NOT use any bracketed markers like [TOC], [IMAGE], [TABLE], [EMPTY], etc. Output only the Markdown content.
 
 user_prompt_1: |
-  Kaynaktaki metni aynen Markdown’a aktar. Görseller için köşeli parantezsiz, **"Resim:"** ile başlayan Türkçe bir paragraf olarak betimleme ekle. Kaynaktaki TOC varsa sarmalayıcı olmadan normal Markdown listesi olarak yaz; yoksa üretme. Tabloları özel blok kullanmadan (sadece Markdown boru ve tireleriyle) ver ve sayfa bölünmelerini birleştir. Anlamsız süsleri, header/footer ve sayfa numaralarını yok say. Boş sayfaları atla; belgenin tamamı boşsa hiç çıktı üretme. Sadece Markdown gövdeyi döndür.
+  Kaynaktaki metni aynen Markdown’a aktar. Görseller için köşeli parantezsiz, Türkçe bir paragraf olarak betimleme ekle. Kaynaktaki TOC varsa sarmalayıcı olmadan normal Markdown listesi olarak yaz; yoksa üretme. Tabloları özel blok kullanmadan (sadece Markdown boru ve tireleriyle) ver ve sayfa bölünmelerini birleştir. Anlamsız süsleri, header/footer ve sayfa numaralarını yok say. Boş sayfaları atla; belgenin tamamı boşsa hiç çıktı üretme. Sadece Markdown gövdeyi döndür.
