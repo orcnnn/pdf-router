@@ -433,28 +433,7 @@ The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
 ```
 
----
 
-## 🆘 Destek ve İletişim
-
-### 📞 Destek Kanalları
-- **GitHub Issues**: [Issues](https://github.com/your-repo/issues)
-- **Discussions**: [Discussions](https://github.com/your-repo/discussions)
-- **Email**: support@example.com
-
-### 📚 Dokümantasyon
-- **API Reference**: [docs/api.md](docs/api.md)
-- **Tutorials**: [docs/tutorials.md](docs/tutorials.md)
-- **FAQ**: [docs/faq.md](docs/faq.md)
-
-### 🌟 Topluluk
-- **Discord**: [Join our Discord](https://discord.gg/your-server)
-- **Twitter**: [@pdfrouter](https://twitter.com/pdfrouter)
-- **LinkedIn**: [PDF Router](https://linkedin.com/company/pdf-router)
-
----
-
-## 📚 Referanslar
 
 ### 🔗 Bağlantılar
 - [Marker Documentation](https://github.com/VikParuchuri/marker)
