@@ -152,6 +152,7 @@ def send_to_marker_map(sample):
     logger.debug(f"Marker result preview: {processed_text[:200] if processed_text else 'Empty'}...")
     
     sample['text'] = processed_text
+    sample['processor_used'] = 'marker'
     return sample
 
 
@@ -167,6 +168,7 @@ def send_to_qwen_vl_25_map(sample):
     logger.debug(f"VLM result preview: {processed_text[:200] if processed_text else 'Empty'}...")
     
     sample['text'] = processed_text
+    sample['processor_used'] = 'vlm'
     return sample
 
 
@@ -218,7 +220,16 @@ def predict_processor_map(sample):
         
         processor = predict_processor(labels_list)
         sample['processor'] = processor.value
-        logger.info(f"Sample classified as: {processor.name} ({processor.value})")
+        
+        # Set processor_used based on classification
+        if processor == ProcessorLabel.MARKER:
+            sample['processor_used'] = 'marker'
+        elif processor == ProcessorLabel.VLM:
+            sample['processor_used'] = 'vlm'
+        else:
+            sample['processor_used'] = 'none'
+            
+        logger.info(f"Sample classified as: {processor.name} ({processor.value}) -> processor_used: {sample['processor_used']}")
         
     except (json.JSONDecodeError, TypeError, ValueError) as e:
         # sample burada dict olduğuna emin değilsek, korumalı erişelim
@@ -230,6 +241,7 @@ def predict_processor_map(sample):
         logger.exception("Full traceback:")
         sample = sample if isinstance(sample, dict) else {}
         sample['processor'] = ProcessorLabel.NOT_FOUND.value
+        sample['processor_used'] = 'none'
     return sample
 
 

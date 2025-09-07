@@ -7,7 +7,7 @@ echo ">>> Starting Marker and vLLM servers for Sanity Test..."
 cd "$(dirname "$0")"
 
 # ------- 1) Marker'ı başlat -------
-sh start_marker_1.sh || true
+sh start_marker.sh || true
 echo "[INFO] Marker servers requested. Waiting 5s..."
 sleep 5
 
