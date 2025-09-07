@@ -9,9 +9,9 @@ debug: false
 
 # streaming = indirildikçe işle (tam istediğin)
 streaming: true          # 🔴 kritik
-skip_existing: true      # çıktıdaki mevcut split'leri atla
+skip_existing: false     # TEST: tüm split'leri işle
 push_mode: overwrite     # split bitince tek commit
-limit: 5                 # TEST: sadece 5 sample işle
+limit: 10                # TEST: sadece 10 sample işle
 
 # performans/ram ayarları
 vlm_batch_size: 8        # VLM'e mini-batch
