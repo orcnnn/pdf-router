@@ -224,7 +224,7 @@ def predict_processor_map(sample):
         # Set processor_used based on classification
         if processor == ProcessorLabel.MARKER:
             sample['processor_used'] = 'marker'
-        elif processor == ProcessorLabel.VLM:
+        elif processor == ProcessorLabel.QWEN_VL_25:
             sample['processor_used'] = 'vlm'
         else:
             sample['processor_used'] = 'none'

@@ -9,29 +9,27 @@ system_prompt_1: |
 
   2) Tables
   - Transcribe tables using Markdown pipes and hyphens.
-  - Wrap every table with [TABLE] and [/TABLE].
-  - If a table continues on the next page, merge into a single [TABLE]...[/TABLE] block; repeat the header row on top only once.
+  - Do NOT wrap tables with any custom markers (no [TABLE] or similar).
+  - If a table continues on the next page, merge into a single table; repeat the header row only once.
   - For row/col spans, approximate by repeating the cell value; do NOT invent data.
 
   3) Images
-  - For each image/figure, insert a single block:
-    [IMAGE]
-    (Türkçe) Resimde görülen içeriği ayrıntılı ama öz şekilde betimle; metin, grafik, eksen, başlık, efsane/legend, numaralar ve kritik görsel unsurları dahil et.
-    [/IMAGE]
-  - Ignore labels like “Figure 3”, but do include any meaningful text visible inside the image.
-  - Image descriptions MUST be in Turkish even if the document is in another language.
+  - For each image/figure, write a single Turkish description as a normal paragraph starting with "Resim:".
+  - Include any visible text, axes, titles, legends, numbers, and critical visual elements.
+  - Do NOT use any bracketed image blocks (no [IMAGE]).
 
   4) Table of Contents (TOC)
-  - If the source contains a TOC, transcribe it as a Markdown list and wrap with [TOC] ... [/TOC].
+  - If the source contains a TOC, transcribe it as a normal Markdown list with no wrapper.
   - Do NOT auto-generate a TOC if none exists.
+  - Do NOT use any bracketed TOC blocks (no [TOC]).
 
   5) Extract only meaningful content
   - Ignore decorative symbols, watermarks, page numbers, running headers/footers, dotted lines, and empty lines.
-  - The ONLY non-text you include is the [IMAGE]...[/IMAGE] description blocks.
+  - The ONLY non-text you include are the image descriptions as plain paragraphs (no custom markers).
 
-  6) [EMPTY] handling
-  - Page-level: If a page has no meaningful text AND no images that require description, output exactly [EMPTY] for that page.
-  - Document-level runs: If you are processing the whole document at once, do NOT emit [EMPTY] unless the entire document lacks meaningful text and images; in that case output exactly [EMPTY].
+  6) Empty handling
+  - Page-level: If a page has no meaningful text AND no images, skip that page (produce nothing for it).
+  - Document-level: If the entire document lacks meaningful text and images, output nothing (an empty document).
 
   7) Formatting details
   - Escape Markdown control characters when they are literal (e.g., \| \* \_).
@@ -40,7 +38,8 @@ system_prompt_1: |
 
   8) Prohibitions
   - Do NOT hallucinate or infer content not present.
-  - Do NOT include explanations, metadata, or YAML keys. Output only the Markdown content.
+  - Do NOT include explanations or metadata.
+  - Do NOT use any bracketed markers like [TOC], [IMAGE], [TABLE], [EMPTY], etc. Output only the Markdown content.
 
 user_prompt_1: |
-  Kaynaktaki metni aynen Markdown’a aktar. Görseller için [IMAGE]...[/IMAGE] bloklarında Türkçe betimleme ekle. Kaynaktaki TOC varsa [TOC]...[/TOC] ile aynen geçir; yoksa üretme. Tabloları [TABLE]...[/TABLE] ile düzgün Markdown tablo biçiminde ver ve sayfa bölünmelerini birleştir. Anlamsız süsleri, header/footer ve sayfa numaralarını yok say. Sadece Markdown gövdeyi döndür.
+  Kaynaktaki metni aynen Markdown’a aktar. Görseller için köşeli parantezsiz, **"Resim:"** ile başlayan Türkçe bir paragraf olarak betimleme ekle. Kaynaktaki TOC varsa sarmalayıcı olmadan normal Markdown listesi olarak yaz; yoksa üretme. Tabloları özel blok kullanmadan (sadece Markdown boru ve tireleriyle) ver ve sayfa bölünmelerini birleştir. Anlamsız süsleri, header/footer ve sayfa numaralarını yok say. Boş sayfaları atla; belgenin tamamı boşsa hiç çıktı üretme. Sadece Markdown gövdeyi döndür.
