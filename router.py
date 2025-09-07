@@ -425,6 +425,15 @@ class PDFRouter:
                             processed.append(vllm_done)
                     except Exception as e:
                         logger.error(f"VLM stage failed for split '{split_name}': {e}")
+                
+                elif not self.use_vllm and hasattr(vllm_ds, '__len__') and len(vllm_ds) > 0:
+                    # HTTP client processing for batch mode
+                    try:
+                        logger.info("Sending samples to VLM (HTTP client)...")
+                        vllm_done = vllm_ds.map(send_to_qwen_vl_25_map, num_proc=_map_np)
+                        processed.append(vllm_done)
+                    except Exception as e:
+                        logger.error(f"VLM HTTP stage failed for split '{split_name}': {e}")
 
                 if not processed:
                     logger.warning(f"No samples were processed for split '{split_name}'.")
@@ -480,12 +489,29 @@ class PDFRouter:
                     nonlocal vlm_imgs, vlm_rows, out_batch
                     if not vlm_imgs:
                         return
-                    prompts = [_PROMPTS['user_prompt_1']] * len(vlm_imgs)
-                    texts = generate_responses(self.vlm, prompts, vlm_imgs, temperature=0.0, max_tokens=2048)
-                    texts = [vlm_text_postprocessing(t) for t in texts]
+                    
+                    logger.info(f"Flushing VLM batch with {len(vlm_imgs)} images...")
+                    
+                    if self.use_vllm:
+                        # Local vLLM processing
+                        prompts = [_PROMPTS['user_prompt_1']] * len(vlm_imgs)
+                        texts = generate_responses(self.vlm, prompts, vlm_imgs, temperature=0.0, max_tokens=2048)
+                        texts = [vlm_text_postprocessing(t) for t in texts]
+                    else:
+                        # HTTP client processing
+                        texts = []
+                        for i, img in enumerate(vlm_imgs):
+                            logger.debug(f"Processing VLM image {i+1}/{len(vlm_imgs)}")
+                            sample = {'images': img}
+                            text = send_to_qwen_vl_25(sample)
+                            processed_text = vlm_text_postprocessing(text)
+                            texts.append(processed_text)
+                    
                     for r, t in zip(vlm_rows, texts):
                         r['text'] = t
                         out_batch.append(r)
+                    
+                    logger.info(f"VLM batch flushed, processed {len(texts)} samples")
                     vlm_imgs, vlm_rows = [], []
 
                 def flush_out_batch():
@@ -516,6 +542,15 @@ class PDFRouter:
                             vlm_rows.append(row)
                             if len(vlm_imgs) >= self.vlm_batch_size:
                                 flush_vlm()
+                    
+                    elif not self.use_vllm and proc == ProcessorLabel.QWEN_VL_25.value:
+                        # HTTP client processing - process immediately
+                        if not has_image:
+                            logger.warning("Row has no 'images' for VLM; skipping.")
+                        else:
+                            logger.info("Processing VLM sample with HTTP client...")
+                            row = send_to_qwen_vl_25_map(row)
+                            out_batch.append(row)
 
                     # else: NOT_FOUND veya diğer sınıflar → şimdilik atlıyoruz
 
