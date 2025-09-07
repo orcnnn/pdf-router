@@ -117,6 +117,9 @@ def send_to_qwen_vl_25(sample):
         response = _CLIENT.chat.completions.create(
             model=_MODEL_NAME,
             temperature=0,
+            top_p=0.9,
+            frequency_penalty=0.6,
+            presence_penalty=0.3,
             messages=[
                 {"role": "system", "content": f"{_PROMPTS['system_prompt_1']}"},
                 {"role": "user", "content": [
