@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from loguru import logger
 from openai import OpenAI, APIConnectionError
 from datasets import get_dataset_config_names, DatasetDict
+from PIL import Image
 
 from utils import (
     get_prompts,
@@ -101,8 +102,14 @@ def send_to_qwen_vl_25(sample):
     
     try:
         logger.debug("Converting image to PNG...")
+        # Resize image to reduce token count
+        img = sample['images']
+        if img.size[0] > 512 or img.size[1] > 512:
+            img = img.resize((512, 512), Image.Resampling.LANCZOS)
+            logger.debug(f"Image resized to {img.size}")
+        
         buffered = BytesIO()
-        sample['images'].save(buffered, format="PNG")
+        img.save(buffered, format="PNG")
         img_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
         logger.debug(f"Image converted, size: {len(img_str)} characters")
         
