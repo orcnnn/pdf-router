@@ -40,6 +40,7 @@ def _init_globals(model_name, debug=False, need_http_client=False):
         base_url = os.getenv("VLLM_API_URL")
         api_key = os.getenv("VLLM_API_KEY") or os.getenv("OPENAI_API_KEY")
         logger.info(f"HTTP client setup - base_url: {base_url}, api_key: {'***' if api_key else 'None'}")
+        logger.info(f"All environment variables: VLLM_API_URL={os.getenv('VLLM_API_URL')}, VLLM_API_KEY={os.getenv('VLLM_API_KEY')}")
         
         if base_url and api_key:
             _CLIENT = OpenAI(base_url=base_url, api_key=api_key, timeout=None)
@@ -120,6 +121,7 @@ def send_to_qwen_vl_25(sample):
         
         result = response.choices[0].message.content
         logger.info(f"✅ VLM processing completed, result length: {len(result) if result else 0}")
+        logger.info(f"VLM raw result: {repr(result)}")
         logger.debug(f"VLM result preview: {result[:200] if result else 'Empty'}...")
         return result
         
@@ -149,10 +151,12 @@ def send_to_marker_map(sample):
 def send_to_qwen_vl_25_map(sample):
     logger.info("Processing sample with VLM...")
     raw_text = send_to_qwen_vl_25(sample)
-    logger.debug(f"VLM raw output length: {len(raw_text) if raw_text else 0}")
+    logger.info(f"VLM raw output length: {len(raw_text) if raw_text else 0}")
+    logger.info(f"VLM raw output: {repr(raw_text)}")
     
     processed_text = vlm_text_postprocessing(raw_text)
     logger.info(f"VLM processing completed, final text length: {len(processed_text) if processed_text else 0}")
+    logger.info(f"VLM final output: {repr(processed_text)}")
     logger.debug(f"VLM result preview: {processed_text[:200] if processed_text else 'Empty'}...")
     
     sample['text'] = processed_text
