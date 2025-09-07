@@ -202,7 +202,7 @@ def predict_processor_map(sample):
 
         # Filter by confidence
         original_count = len(labels_list)
-        labels_list = [l for l in labels_list if isinstance(l, dict) and float(l.get('confidence', 0.0)) > 0.8]
+        labels_list = [l for l in labels_list if isinstance(l, dict) and float(l.get('confidence', 0.0)) > 0.5]
         logger.debug(f"Filtered labels by confidence > 0.5: {original_count} -> {len(labels_list)}")
         
         processor = predict_processor(labels_list)

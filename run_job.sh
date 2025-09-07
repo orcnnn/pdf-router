@@ -140,5 +140,20 @@ echo "[INFO] vLLM endpoint is reachable."
 echo ">>> Starting the Python processing script..."
 python main.py run.yaml
 
+echo ">>> Python processing completed."
+
+# ------- 7) vLLM job'unu kapat -------
+echo ">>> Stopping vLLM server..."
+if scancel "$JID" 2>/dev/null; then
+  echo "[INFO] vLLM job $JID cancelled successfully."
+else
+  echo "[WARN] Failed to cancel vLLM job $JID (may have already finished)."
+fi
+
+# ------- 8) Marker servislerini kapat -------
+echo ">>> Stopping Marker servers..."
+pkill -f "marker_server" || true
+echo "[INFO] Marker servers stopped."
+
 echo ">>> Sanity Test script finished."
 
