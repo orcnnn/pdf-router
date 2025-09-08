@@ -114,10 +114,21 @@ def send_to_qwen_vl_25(sample):
         logger.debug(f"Image converted, size: {len(img_str)} characters")
         
         logger.info("Sending request to VLM API...")
+        # Prepare prompts with safe fallbacks
+        prompts_dict = _PROMPTS or {}
+        system_text = prompts_dict.get('system_prompt_1')
+        user_text = prompts_dict.get('user_prompt_1')
+        if system_text is None:
+            logger.warning("system_prompt_1 missing; using minimal system prompt fallback")
+            system_text = "You are a helpful assistant. Output ONLY the Markdown body."
+        if user_text is None:
+            logger.warning("user_prompt_1 missing; using minimal user prompt fallback")
+            user_text = "Metni aynen Markdown’a aktar. Görseli betimle, tekrar etme."
+
         # Some models (e.g., InternVL) may not support the 'system' role in chat template.
-        use_internvl_format = "internvl" in (_MODEL_NAME or "").lower()
+        use_internvl_format = "internvl" in (_MODEL_NAME or "").lower() or ('system_prompt_1' not in prompts_dict)
         if use_internvl_format:
-            combined_text = f"{_PROMPTS['system_prompt_1']}\n\n{_PROMPTS['user_prompt_1']}"
+            combined_text = f"{system_text}\n\n{user_text}"
             messages = [
                 {
                     "role": "user",
@@ -129,11 +140,11 @@ def send_to_qwen_vl_25(sample):
             ]
         else:
             messages = [
-                {"role": "system", "content": f"{_PROMPTS['system_prompt_1']}"},
+                {"role": "system", "content": system_text},
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": f"{_PROMPTS['user_prompt_1']}"},
+                        {"type": "text", "text": user_text},
                         {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_str}"}},
                     ],
                 },
