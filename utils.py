@@ -67,8 +67,12 @@ def get_classes() -> tuple:
     return tuple(CLASSES)
 
 def get_prompts() -> dict:
-    """Dışarıya derin kopya verelim ki dışarıda mutasyon içeriği bozmasın."""
-    return copy.deepcopy(prompts)
+    """
+    Prompts dosyasını her çağrıda diskten yükler.
+    Dışarıya derin kopya vererek dışarıda mutasyonun içeriği bozmasını engeller.
+    """
+    data = _load_prompts(PROMPTS_PATH)
+    return copy.deepcopy(data)
 
 # -----------------------------
 # .env ve HF API ayarları

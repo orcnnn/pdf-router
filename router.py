@@ -114,8 +114,8 @@ def send_to_qwen_vl_25(sample):
         logger.debug(f"Image converted, size: {len(img_str)} characters")
         
         logger.info("Sending request to VLM API...")
-        # Prepare prompts with safe fallbacks
-        prompts_dict = _PROMPTS or {}
+        # Prepare prompts with safe fallbacks (always reload to avoid stale cache)
+        prompts_dict = get_prompts() or {}
         system_text = prompts_dict.get('system_prompt_1')
         user_text = prompts_dict.get('user_prompt_1')
         if system_text is None:
