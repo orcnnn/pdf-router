@@ -114,19 +114,38 @@ def send_to_qwen_vl_25(sample):
         logger.debug(f"Image converted, size: {len(img_str)} characters")
         
         logger.info("Sending request to VLM API...")
+        # Some models (e.g., InternVL) may not support the 'system' role in chat template.
+        use_internvl_format = "internvl" in (_MODEL_NAME or "").lower()
+        if use_internvl_format:
+            combined_text = f"{_PROMPTS['system_prompt_1']}\n\n{_PROMPTS['user_prompt_1']}"
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": combined_text},
+                        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_str}"}},
+                    ],
+                }
+            ]
+        else:
+            messages = [
+                {"role": "system", "content": f"{_PROMPTS['system_prompt_1']}"},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": f"{_PROMPTS['user_prompt_1']}"},
+                        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_str}"}},
+                    ],
+                },
+            ]
+
         response = _CLIENT.chat.completions.create(
             model=_MODEL_NAME,
             temperature=0,
             top_p=0.9,
-            frequency_penalty=0.6,
-            presence_penalty=0.3,
-            messages=[
-                {"role": "system", "content": f"{_PROMPTS['system_prompt_1']}"},
-                {"role": "user", "content": [
-                    {"type": "text", "text": f"{_PROMPTS['user_prompt_1']}"},
-                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_str}"}}
-                ]}
-            ]
+            frequency_penalty=0.3,
+            presence_penalty=0.1,
+            messages=messages,
         )
         
         result = response.choices[0].message.content
@@ -218,7 +237,7 @@ def predict_processor_map(sample):
 
         # Filter by confidence
         original_count = len(labels_list)
-        labels_list = [l for l in labels_list if isinstance(l, dict) and float(l.get('confidence', 0.0)) > 0.5]
+        labels_list = [l for l in labels_list if isinstance(l, dict) and float(l.get('confidence', 0.0)) > 0.85]
         logger.debug(f"Filtered labels by confidence > 0.5: {original_count} -> {len(labels_list)}")
         
         processor = predict_processor(labels_list)
@@ -626,3 +645,4 @@ class PDFRouter:
                     logger.error(f"Push failed (arg error). Use DatasetDict push. Error: {e}")
                 except Exception as e:
                     logger.error(f"Push failed. Error: {e}")
+

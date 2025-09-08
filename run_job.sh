@@ -26,7 +26,7 @@ echo "[INFO] vLLM Job ID: ${JID}"
 # ------- 3) Endpoint dosyasını bekle -------
 EP_FILE="vllm_endpoint_${JID}.json"
 LATEST_FILE="vllm_endpoint_latest.json"
-TIMEOUT=600   # saniye (10 dk)
+TIMEOUT=1200   # saniye (10 dk)
 SLEEP=2
 
 echo "[INFO] Waiting for endpoint file: ${EP_FILE} (timeout=${TIMEOUT}s)"

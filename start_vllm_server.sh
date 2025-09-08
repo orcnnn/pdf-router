@@ -24,7 +24,7 @@ echo "[INFO] Launching vLLM on port ${PORT}, logging to ${LOG_FILE}"
 
 # ---- VLLM SUNUCUYU BAŞLAT (KENDİ ARGÜMANLARINLA) ----
 # ÖRNEK: argümanları kendine göre uyarlayabilirsin
-vllm serve Qwen/Qwen2.5-VL-32B-Instruct \
+vllm serve Qwen/Qwen2.5-VL-72B-Instruct \
   --trust-remote-code \
   --host 0.0.0.0 --port "${PORT}" \
   --tensor-parallel-size 4 \
