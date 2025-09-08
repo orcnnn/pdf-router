@@ -5,6 +5,7 @@ import os
 import re
 import copy
 import yaml
+from loguru import logger
 import threading
 from enum import Enum
 from itertools import cycle
@@ -25,14 +26,21 @@ except NameError:
 PROMPTS_PATH = os.path.join(SCRIPT_DIR, "prompts.yml")
 
 def _load_prompts(path: str) -> dict:
+    """Load prompts from a YAML file. Logs path and errors for visibility."""
     try:
+        logger.debug(f"Loading prompts from: {path}")
         with open(path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
+        if not isinstance(data, dict):
+            logger.warning(f"Prompts YAML at {path} did not return a dict. Got: {type(data)}")
+            return {}
+        logger.debug(f"Prompts loaded with keys: {list(data.keys())}")
         return data
     except FileNotFoundError:
+        logger.warning(f"Prompts file not found at: {path}")
         return {}
-    except Exception:
-        # YAML hataları vb. durumda boş dön
+    except Exception as e:
+        logger.error(f"Failed to load prompts from {path}: {e}")
         return {}
 
 prompts = _load_prompts(PROMPTS_PATH)
@@ -68,11 +76,34 @@ def get_classes() -> tuple:
 
 def get_prompts() -> dict:
     """
-    Prompts dosyasını her çağrıda diskten yükler.
-    Dışarıya derin kopya vererek dışarıda mutasyonun içeriği bozmasını engeller.
+    Load prompts with robust fallbacks:
+    1) PROMPTS_PATH env override if provided
+    2) Module directory `prompts.yml`
+    3) Current working directory `prompts.yml`
+    Returns a deep-copied dict to prevent external mutation.
     """
+    # 1) Env override
+    env_path = os.getenv("PROMPTS_PATH")
+    if env_path:
+        data = _load_prompts(env_path)
+        if data:
+            return copy.deepcopy(data)
+        logger.warning(f"PROMPTS_PATH set but could not load: {env_path}")
+
+    # 2) Module directory
     data = _load_prompts(PROMPTS_PATH)
-    return copy.deepcopy(data)
+    if data and ("system_prompt_1" in data or "user_prompt_1" in data):
+        return copy.deepcopy(data)
+
+    # 3) Current working directory
+    cwd_path = os.path.join(os.getcwd(), "prompts.yml")
+    if cwd_path != PROMPTS_PATH:
+        data = _load_prompts(cwd_path)
+        if data:
+            return copy.deepcopy(data)
+
+    logger.warning("Prompts could not be loaded from any known location. Returning empty prompts.")
+    return {}
 
 # -----------------------------
 # .env ve HF API ayarları
