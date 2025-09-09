@@ -65,23 +65,45 @@ def predict_processor(labels):
     if not isinstance(labels, list):
         logger.warning(f"Labels is not a list: {type(labels)}")
         return ProcessorLabel.NOT_FOUND
-        
-    class_labels = {l['class'] for l in labels if isinstance(l, dict) and 'class' in l}
-    logger.debug(f"Extracted class labels: {class_labels}")
+    
+    # Route by per-label confidence (>= 0.8) with explicit class mapping
+    THRESH = 0.8
+    for item in labels:
+        if not isinstance(item, dict):
+            continue
+        cls = item.get('class')
+        try:
+            conf = float(item.get('confidence', 0.0))
+        except Exception:
+            conf = 0.0
 
-    if "İçindekiler" in class_labels:
-        logger.info("Content type: İçindekiler -> NOT_FOUND")
-        return ProcessorLabel.NOT_FOUND
+        if cls == 'Tablo' and conf > THRESH:
+            return ProcessorLabel.MARKER
 
-    if "Tablo" in class_labels or "Soru" in class_labels or "Metin" in class_labels:
-        logger.info(f"Content type: {class_labels} -> MARKER")
-        return ProcessorLabel.MARKER
-        
-    if "Resim/Tablo Açıklaması" in class_labels or "Resim" in class_labels or "Kapak Sayfası" in class_labels:
-        logger.info(f"Content type: {class_labels} -> QWEN_VL_25")
-        return ProcessorLabel.QWEN_VL_25
-        
-    logger.info(f"Content type: {class_labels} -> NOT_FOUND (no matching classes)")
+        if cls == 'Soru' and conf > THRESH:
+            return ProcessorLabel.MARKER
+
+        if cls == 'Metin' and conf > THRESH:
+            return ProcessorLabel.MARKER
+
+        if cls == 'Kaynakça' and conf > THRESH:
+            return ProcessorLabel.MARKER
+
+        if cls == 'Kısaltmalar' and conf > THRESH:
+            return ProcessorLabel.MARKER
+
+        if cls == 'Resim' and conf > THRESH:
+            return ProcessorLabel.QWEN_VL_25
+
+        if cls == 'Resim/Tablo Açıklaması' and conf > THRESH:
+            return ProcessorLabel.QWEN_VL_25
+
+        if cls == 'Kapak Sayfası' and conf > THRESH:
+            return ProcessorLabel.QWEN_VL_25
+
+        if cls == 'Ekler' and conf > THRESH:
+            return ProcessorLabel.QWEN_VL_25
+
     return ProcessorLabel.NOT_FOUND
 
 
@@ -246,10 +268,11 @@ def predict_processor_map(sample):
             logger.warning(f"Unexpected data type: {type(data)}")
             labels_list = []
 
-        # Filter by confidence
+        # Filter by confidence (align with routing threshold)
+        THRESH = 0.8
         original_count = len(labels_list)
-        labels_list = [l for l in labels_list if isinstance(l, dict) and float(l.get('confidence', 0.0)) > 0.85]
-        logger.debug(f"Filtered labels by confidence > 0.5: {original_count} -> {len(labels_list)}")
+        labels_list = [l for l in labels_list if isinstance(l, dict) and float(l.get('confidence', 0.0)) >= THRESH]
+        logger.debug(f"Filtered labels by confidence >= {THRESH}: {original_count} -> {len(labels_list)}")
         
         processor = predict_processor(labels_list)
         sample['processor'] = processor.value

@@ -24,8 +24,16 @@ system_prompt_1: |
      - Keep the “Not:” line under the table; include test names exactly.
      - Convert footnote letters/numbers to **Unicode superscripts** (never HTML): `a→ᵃ`, `b→ᵇ`, `1→¹`, `2→²`, etc.
   6) Figures
-     - If a figure exists, write **one concise Turkish caption paragraph** describing what is visible
-       (title/axes/legend/text if any). **Do not** add wrappers or image tags; do not invent data.
+     - If a figure/graph/diagram exists, write **one concise Turkish caption paragraph** describing what is visible:
+       - Başlık, eksen adları ve birimleri
+       - Eksen aralıkları ve yönü (örn. artan/azalan trend)
+       - Legend/renkler ve seriler (varsa)
+       - Grafik türü (çizgi, çubuk, pasta, dağılım vb.)
+       - Görsel üzerindeki anlamlı metinler/sayılar
+       - Önemli tepe/dip veya dönüm noktaları
+       - Belirsizlik bantları/şeritleri (varsa)
+       - Varsayım yok: Görünmeyen veriyi uydurma
+       **Do not** add wrappers or image tags; do not invent data.
   7) Paragraph text
      - Preserve paragraph order; fix obvious OCR spelling (e.g., “Aratırıma”→“Araştırmaya”, “pnomoni”→“pnömoni”).
      - Preserve quotation marks in items/sentences.
