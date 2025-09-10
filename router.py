@@ -47,7 +47,7 @@ def _init_globals(model_name, debug=False, need_http_client=False):
             _CLIENT = OpenAI(base_url=base_url, api_key=api_key, timeout=None)
             logger.info("✅ HTTP VLM client initialized successfully")
         else:
-            logger.error("HTTP VLM client disabled: VLLM_API_URL or API key is missing.")
+            logger.error("HTTP VLM client disabled: VLLM_API_URLP0+r\ or API key is missing.")
             logger.error(f"VLLM_API_URL: {base_url}")
             logger.error(f"API_KEY available: {bool(api_key)}")
     else:
@@ -564,6 +564,11 @@ class PDFRouter:
                 marker_ds = mapped.filter(lambda x: x['processor'] == _MARKER, num_proc=_map_np)
                 vllm_ds = mapped.filter(lambda x: x['processor'] == _VLM, num_proc=_map_np)
 
+                try:
+                    logger.info(f"Routing summary for '{split_name}': total={len(mapped)}, marker={len(marker_ds)}, vlm={len(vllm_ds)}")
+                except Exception:
+                    logger.info("Routing summary: computed counts (stream or lazy dataset)")
+
                 processed = []
 
                 if self.use_marker:
@@ -584,7 +589,14 @@ class PDFRouter:
                         else:
                             logger.info("Sending samples to VLM (batched)...")
                             images = list(vllm_ds['images'])
-                            prompts = [_PROMPTS['user_prompt_1']] * len(images)
+                            fallback_user = (
+                                _PROMPTS.get('user_prompt_1')
+                                if isinstance(_PROMPTS, dict) and 'user_prompt_1' in _PROMPTS
+                                else (
+                                    "You will receive one thesis page image. Transcribe it into pure Turkish Markdown (no wrappers, no YAML, no explanations). If the page has a figure, write a short Turkish caption paragraph describing visible elements only. For tables, output GitHub Markdown tables using pipes and hyphens."
+                                )
+                            )
+                            prompts = [fallback_user] * len(images)
                             texts = generate_responses(self.vlm, prompts, images, temperature=0.0, max_tokens=2048)
                             texts = [vlm_text_postprocessing(t) for t in texts]
                             vllm_done = vllm_ds.add_column("text", texts)
@@ -660,7 +672,14 @@ class PDFRouter:
                     
                     if self.use_vllm:
                         # Local vLLM processing
-                        prompts = [_PROMPTS['user_prompt_1']] * len(vlm_imgs)
+                        fallback_user = (
+                            _PROMPTS.get('user_prompt_1')
+                            if isinstance(_PROMPTS, dict) and 'user_prompt_1' in _PROMPTS
+                            else (
+                                "You will receive one thesis page image. Transcribe it into pure Turkish Markdown (no wrappers, no YAML, no explanations). If the page has a figure, write a short Turkish caption paragraph describing visible elements only. For tables, output GitHub Markdown tables using pipes and hyphens."
+                            )
+                        )
+                        prompts = [fallback_user] * len(vlm_imgs)
                         texts = generate_responses(self.vlm, prompts, vlm_imgs, temperature=0.0, max_tokens=2048)
                         texts = [vlm_text_postprocessing(t) for t in texts]
                     else:
@@ -766,4 +785,5 @@ class PDFRouter:
                     logger.error(f"Push failed (arg error). Use DatasetDict push. Error: {e}")
                 except Exception as e:
                     logger.error(f"Push failed. Error: {e}")
+
 

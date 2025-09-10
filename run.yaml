@@ -1,6 +1,6 @@
 model_name: "Qwen/Qwen2.5-VL-72B-Instruct"
 ds_name: "orcn/predictions"
-output_ds_name: "sghosts/orcun_processed"
+output_ds_name: "sghosts/ahmed_processed"
 
 # işleme seçenekleri
 use_vlm: false
