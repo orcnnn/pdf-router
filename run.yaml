@@ -8,20 +8,20 @@ use_marker: true
 debug: false
 
 # streaming = indirildikçe işle (tam istediğin)
-streaming: true          # 🔴 kritik
+streaming: false          # 🔴 kritik
 skip_existing: false     # TEST: tüm split'leri işle
 push_mode: overwrite     # split bitince tek commit
-limit: 2000               # TEST: sadece 10 sample işle
+#limit: 2000               # TEST: sadece 10 sample işle
 
 # performans/ram ayarları
 vlm_batch_size: 8        # VLM'e mini-batch
 buffer_size: 256         # RAM'de geçici sonuç tamponu
 tensor_parallel_size: 4  # 2 GPU kullanıyorsan 2; tek GPU ise 1 yap
 gpu_memory_utilization: 0.8
-max_model_len: 32000
+max_model_len: 16384
 
 # isteğe bağlı:
 # start_from_split: 0     # ya da "config-adi"
 # until_split: null
-#n_proc: 8               # streaming=True iken num_proc kullanılmaz (HF kısıtı)
+n_proc: 8               # streaming=True iken num_proc kullanılmaz (HF kısıtı)
 
