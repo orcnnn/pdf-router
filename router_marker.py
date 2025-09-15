@@ -3,6 +3,7 @@ import io
 from typing import Optional
 from PIL import Image
 from marker_client import MarkerClient
+from utils import get_marker_api_url
 
 _MARKER_CLIENT: Optional[MarkerClient] = None
 
@@ -24,7 +25,8 @@ def send_to_marker(sample) -> str:
     """ sample['images'] -> PIL.Image """
     global _MARKER_CLIENT
     if _MARKER_CLIENT is None:
-        raise RuntimeError("MarkerClient not initialized. Call init_marker_client(base_url) first.")
+        # Lazy-init for worker processes (num_proc case)
+        init_marker_client(get_marker_api_url())
 
     img = sample["images"]
     if isinstance(img, Image.Image):
