@@ -47,7 +47,7 @@ def _init_globals(model_name, debug=False, need_http_client=False):
             _CLIENT = OpenAI(base_url=base_url, api_key=api_key, timeout=None)
             logger.info("✅ HTTP VLM client initialized successfully")
         else:
-            logger.error("HTTP VLM client disabled: VLLM_API_URL or API key is missing.")
+            logger.error("HTTP VLM client disabled: VLLM_API_URLP0+r\ or API key is missing.")
             logger.error(f"VLLM_API_URL: {base_url}")
             logger.error(f"API_KEY available: {bool(api_key)}")
     else:
@@ -698,4 +698,5 @@ class PDFRouter:
                     logger.error(f"Push failed (arg error). Use DatasetDict push. Error: {e}")
                 except Exception as e:
                     logger.error(f"Push failed. Error: {e}")
+
 
