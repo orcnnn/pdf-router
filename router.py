@@ -141,98 +141,11 @@ def send_to_qwen_vl_25(sample):
         system_text = prompts_dict.get('system_prompt_1')
         user_text = prompts_dict.get('user_prompt_1')
         if system_text is None:
-          # logger.warning("system_prompt_1 missing; using minimal system prompt fallback")
-            system_text = dedent("""You transcribe a single page from a scientific PDF into **faithful, clean Markdown in Turkish**.
-
-  **OUTPUT:** Only the Markdown body. No YAML, no explanations, no “here is the result”, no special wrappers.
-
-  # GENERAL RULES
-  - Drop headers/footers, page numbers, running titles, decorative lines.
-  - Preserve special symbols exactly: `±`, `%`, `n=`, `*`, superscripts/subscripts.
-  - Do not add, remove, summarize, or invent content. No rounding or guessing.
-  - Keep paragraphs as-is; only fix obvious OCR/type artifacts.
-  - Normalize item labels: `Madde27` → `Madde 27`; fix letter/number swaps when obvious
-    (e.g., `Madde3O` with “O” → `Madde 30`).
-
-  # NUMERIC FORMATTING
-  - Use **comma** for decimals: `3.97` → `3,97`, `0.001` → `0,001`.
-  - Keep the `±` sign as-is: `3,42±0,51`.
-  - p-values as `p=0,008`; if asterisk exists, keep it (e.g., `p=0,001*`).
-  - No thousands separators (no spaces, no dots).
-  - Fix digit/letter confusions only in numeric context:
-    O/o→0, l/I→1, S→5, B→8, Z→2 (numeric contexts only).
-    Examples: `0.00`/`O.OO` → `0,00`; `3O,O4` → `3,04`. If unsure, **don’t change**.
-
-  # TABLES (GitHub-Flavored Markdown)
-  - Write all tables using pipes and hyphens.
-  - **Keep group headers exactly as in the source**, including sample sizes:
-    e.g., `Elverişlidir (n=160)`, `Kısmen elverişlidir (n=129)`, `Yeterli değil (n=38)`.
-  - If each group has multiple measures (e.g., “X±SS” and “Ortanca”), split them into **separate columns**.
-    Use this header layout (adapt names exactly to the page):
-    | Madde | Elverişlidir X±SS | Elverişlidir Ortanca | Kısmen elverişlidir X±SS | Kısmen elverişlidir Ortanca | Yeterli değil X±SS | Yeterli değil Ortanca | p* |
-    |---|---:|---:|---:|---:|---:|---:|:---:|
-  - Represent row/column spans by **repeating values**. Never invent numbers.
-  - If a table is split across pages, **merge into one table**.
-  - Table footnotes go as normal text right **below** the table, e.g.:
-    `X±SS: Ortalama±Standart sapma; *: Kruskal–Wallis H testi sonucu.`
-
-  # IMAGES / FIGURES (NO WRAPPERS)
-  - If the page contains a figure/image/chart/diagram/photo, write a **plain Turkish paragraph or a short bullet list** describing it.
-  - Start with `Şekil:` (if a caption/number exists, include it), then describe succinctly:
-    - türü (grafik/akış diyagramı/çizim/foto), başlık/alt yazı (varsa),
-    - eksen adları ve birimleri, efsane/legend anahtarları,
-    - şekil üzerindeki metin/etiketler/simgeler/oklar,
-    - panel yapısı (A/B/C) ve her panelin kısa içeriği,
-    - görünür sayılar (örn. n-değerleri) ve **belirgin eğilimler (yaklaşık değer UYDURMADAN)**.
-  - Do **not** invent numbers or colors; only report what is explicitly visible (axis ticks, labels, on-chart values).
-  - If the figure is actually a legible table, transcribe it as a Markdown table (per TABLES) instead.
-  - If the caption appears as “Şekil 2:” (or “Figure 2:”), keep it as a normal line in the correct position.
-  - If an image is purely decorative, omit it.
-
-  # OCR CLEANUP (only when certain)
-  - Remove non-data noise like `A,A,A`, repeated punctuation runs, decorative dashes.
-  - Long dashes `—/–` acting as placeholders → treat as **empty cells** (` ` or `NA`).
-  - Convert decimal dot→comma only in numeric contexts; otherwise keep original.
-  - Only correct obvious numeric typos; if not certain, leave unchanged.
-
-  # MISSING / SUSPICIOUS CELLS
-  - If unreadable or purely decorative, leave the cell blank (` `) or write `NA`.
-  - If a group shows only one measure (e.g., only `X±SS`), include **only the columns present** for that group.
-
-  # DUNN / KRUSKAL–WALLIS COMPARISONS
-  - For pairwise-comparison tables, use a clear header like:
-    | Öneri | Madde 27 | Madde 30 | Madde 34 |
-    |---|---:|---:|---:|
-  - Each row is a comparison label (e.g., `Elverişlidir – Kısmen elverişlidir`) plus the p-values.
-  - Keep any textual interpretations below the table as plain paragraphs; do not rephrase p-values.
-
-  # EXAMPLE (header with one filled row)
-  | Madde | Elverişlidir X±SS | Elverişlidir Ortanca | Kısmen elverişlidir X±SS | Kısmen elverişlidir Ortanca | Yeterli değil X±SS | Yeterli değil Ortanca | p* |
-  |---|---:|---:|---:|---:|---:|---:|:---:|
-  | Madde 27 | 2,40±1,15 | 2,00 | 2,34±0,95 | 2,00 | 3,08±1,30 | 3,00 | 0,008 |
-
-  # DO NOT
-  - Invent/fill in missing values; no estimates or rounding.
-  - Output anything except Markdown body (no code fences, no YAML, no commentary, **no wrappers**).
-  - Use dot-decimals or mixed separators (always comma).
-
-  # REMINDER
-  - Goal: **faithful** transcription + **clean** formatting in Turkish. No additions or omissions.""").strip()
+            logger.warning("system_prompt_1 missing; using minimal system prompt fallback")
+            
         if user_text is None:
-           #logger.warning("user_prompt_1 missing; using minimal user prompt fallback")
-            user_text = dedent("""You will receive **one page** (text and/or detected elements from a Turkish scientific thesis page).
-  Task: Transcribe it into **pure Markdown in Turkish**, following the system rules above.
-
-  **Important:**
-  - Output only the Markdown body—no extra commentary, no YAML, **no special wrappers**.
-  - For **tables**, keep group headers and split `X±SS` and `Ortanca` into separate columns per group.
-  - For **figures/images/charts/diagrams**, write a concise Turkish paragraph or short bullet list starting with `Şekil:` (if numbered), describing:
-    tür, caption (if any), axes/units, legend keys, on-image text/labels/arrows, panels A/B/C, visible n-values, and evident trends **without inventing numbers**.
-    If the figure is actually a legible table, transcribe it as a Markdown table instead.
-  - Fix decimal dots to commas in numeric contexts; never guess unreadable values—leave them blank or `NA`.
-
-  **Page content starts below:**
-  {{PAGE_TEXT_OR_OCR}}""").strip()
+            logger.warning("user_prompt_1 missing; using minimal user prompt fallback")
+        
 
         # Some models (e.g., InternVL) may not support the 'system' role in chat template.
         use_internvl_format = "internvl" in (_MODEL_NAME or "").lower() or ('system_prompt_1' not in prompts_dict)
@@ -564,6 +477,11 @@ class PDFRouter:
                 marker_ds = mapped.filter(lambda x: x['processor'] == _MARKER, num_proc=_map_np)
                 vllm_ds = mapped.filter(lambda x: x['processor'] == _VLM, num_proc=_map_np)
 
+                try:
+                    logger.info(f"Routing summary for '{split_name}': total={len(mapped)}, marker={len(marker_ds)}, vlm={len(vllm_ds)}")
+                except Exception:
+                    logger.info("Routing summary: computed counts (stream or lazy dataset)")
+
                 processed = []
 
                 if self.use_marker:
@@ -584,7 +502,14 @@ class PDFRouter:
                         else:
                             logger.info("Sending samples to VLM (batched)...")
                             images = list(vllm_ds['images'])
-                            prompts = [_PROMPTS['user_prompt_1']] * len(images)
+                            fallback_user = (
+                                _PROMPTS.get('user_prompt_1')
+                                if isinstance(_PROMPTS, dict) and 'user_prompt_1' in _PROMPTS
+                                else (
+                                    "You will receive one thesis page image. Transcribe it into pure Turkish Markdown (no wrappers, no YAML, no explanations). If the page has a figure, write a short Turkish caption paragraph describing visible elements only. For tables, output GitHub Markdown tables using pipes and hyphens."
+                                )
+                            )
+                            prompts = [fallback_user] * len(images)
                             texts = generate_responses(self.vlm, prompts, images, temperature=0.0, max_tokens=2048)
                             texts = [vlm_text_postprocessing(t) for t in texts]
                             vllm_done = vllm_ds.add_column("text", texts)
@@ -660,7 +585,14 @@ class PDFRouter:
                     
                     if self.use_vllm:
                         # Local vLLM processing
-                        prompts = [_PROMPTS['user_prompt_1']] * len(vlm_imgs)
+                        fallback_user = (
+                            _PROMPTS.get('user_prompt_1')
+                            if isinstance(_PROMPTS, dict) and 'user_prompt_1' in _PROMPTS
+                            else (
+                                "You will receive one thesis page image. Transcribe it into pure Turkish Markdown (no wrappers, no YAML, no explanations). If the page has a figure, write a short Turkish caption paragraph describing visible elements only. For tables, output GitHub Markdown tables using pipes and hyphens."
+                            )
+                        )
+                        prompts = [fallback_user] * len(vlm_imgs)
                         texts = generate_responses(self.vlm, prompts, vlm_imgs, temperature=0.0, max_tokens=2048)
                         texts = [vlm_text_postprocessing(t) for t in texts]
                     else:
