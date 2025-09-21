@@ -36,23 +36,23 @@ def _init_globals(model_name, debug=False, need_http_client=False):
     global _CLIENT, _MODEL_NAME, _PROMPTS, _DEBUG
     _CLIENT = None
     logger.info(f"Initializing globals - model_name: {model_name}, debug: {debug}, need_http_client: {need_http_client}")
-    
+
     if need_http_client:
         base_url = os.getenv("VLLM_API_URL")
         api_key = os.getenv("VLLM_API_KEY") or os.getenv("OPENAI_API_KEY")
         logger.info(f"HTTP client setup - base_url: {base_url}, api_key: {'***' if api_key else 'None'}")
         logger.info(f"All environment variables: VLLM_API_URL={os.getenv('VLLM_API_URL')}, VLLM_API_KEY={os.getenv('VLLM_API_KEY')}")
-        
+
         if base_url and api_key:
             _CLIENT = OpenAI(base_url=base_url, api_key=api_key, timeout=None)
             logger.info("✅ HTTP VLM client initialized successfully")
         else:
-            logger.error("HTTP VLM client disabled: VLLM_API_URLP0+r\ or API key is missing.")
+            logger.error("HTTP VLM client disabled: VLLM_API_URL or API key is missing.")
             logger.error(f"VLLM_API_URL: {base_url}")
             logger.error(f"API_KEY available: {bool(api_key)}")
     else:
         logger.info("HTTP client not needed - using local vLLM")
-        
+
     _MODEL_NAME = model_name
     _PROMPTS = get_prompts()
     _DEBUG = debug
@@ -61,11 +61,11 @@ def _init_globals(model_name, debug=False, need_http_client=False):
 
 def predict_processor(labels):
     logger.debug(f"Predicting processor for labels: {labels}")
-    
+
     if not isinstance(labels, list):
         logger.warning(f"Labels is not a list: {type(labels)}")
         return ProcessorLabel.NOT_FOUND
-    
+
     # Route by per-label confidence (>= 0.8) with explicit class mapping
     THRESH = 0.8
     for item in labels:
@@ -86,23 +86,23 @@ def predict_processor(labels):
         if cls == 'Metin' and conf > THRESH:
             return ProcessorLabel.MARKER
 
-        if cls == 'Kaynakça' and conf > THRESH:
-            return ProcessorLabel.MARKER
+  #      if cls == 'Kaynakça' and conf > THRESH:
+  #          return ProcessorLabel.MARKER
 
-        if cls == 'Kısaltmalar' and conf > THRESH:
-            return ProcessorLabel.MARKER
+  #      if cls == 'Kısaltmalar' and conf > THRESH:
+  #          return ProcessorLabel.MARKER
 
         if cls == 'Resim' and conf > THRESH:
             return ProcessorLabel.QWEN_VL_25
 
         if cls == 'Resim/Tablo Açıklaması' and conf > THRESH:
-            return ProcessorLabel.QWEN_VL_25
+            return ProcessorLabel.MARKER
 
-        if cls == 'Kapak Sayfası' and conf > THRESH:
-            return ProcessorLabel.QWEN_VL_25
+ #      if cls == 'Kapak Sayfası' and conf > THRESH:
+ #           return ProcessorLabel.QWEN_VL_25
 
-        if cls == 'Ekler' and conf > THRESH:
-            return ProcessorLabel.QWEN_VL_25
+ #       if cls == 'Ekler' and conf > THRESH:
+ #           return ProcessorLabel.QWEN_VL_25
 
     return ProcessorLabel.NOT_FOUND
 
@@ -115,13 +115,13 @@ CANDIDATE_FIELDS = ["image", "file", "image_file"]
 
 def send_to_qwen_vl_25(sample):
     logger.info("Starting VLM processing...")
-    
+
     if _CLIENT is None:
         logger.error("HTTP VLM client not initialized; skipping send_to_qwen_vl_25.")
         return ""
-        
+
     logger.info(f"VLM client available, model: {_MODEL_NAME}")
-    
+
     try:
         logger.debug("Converting image to PNG...")
         # Resize image to reduce token count
@@ -129,12 +129,12 @@ def send_to_qwen_vl_25(sample):
         if img.size[0] > 512 or img.size[1] > 512:
             img = img.resize((512, 512), Image.Resampling.LANCZOS)
             logger.debug(f"Image resized to {img.size}")
-        
+
         buffered = BytesIO()
         img.save(buffered, format="PNG")
         img_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
         logger.debug(f"Image converted, size: {len(img_str)} characters")
-        
+
         logger.info("Sending request to VLM API...")
         # Prepare prompts with safe fallbacks (always reload to avoid stale cache)
         prompts_dict = get_prompts() or {}
@@ -142,10 +142,10 @@ def send_to_qwen_vl_25(sample):
         user_text = prompts_dict.get('user_prompt_1')
         if system_text is None:
             logger.warning("system_prompt_1 missing; using minimal system prompt fallback")
-            
+
         if user_text is None:
             logger.warning("user_prompt_1 missing; using minimal user prompt fallback")
-        
+
 
         # Some models (e.g., InternVL) may not support the 'system' role in chat template.
         use_internvl_format = "internvl" in (_MODEL_NAME or "").lower() or ('system_prompt_1' not in prompts_dict)
@@ -180,13 +180,13 @@ def send_to_qwen_vl_25(sample):
             presence_penalty=0.1,
             messages=messages,
         )
-        
+
         result = response.choices[0].message.content
         logger.info(f"✅ VLM processing completed, result length: {len(result) if result else 0}")
         logger.info(f"VLM raw result: {repr(result)}")
         logger.debug(f"VLM result preview: {result[:200] if result else 'Empty'}...")
         return result
-        
+
     except APIConnectionError as e:
         logger.error(f"Could not connect to VLM API: {e}")
         return ""
@@ -201,11 +201,11 @@ def send_to_marker_map(sample):
     logger.info("Processing sample with Marker...")
     raw_text = send_to_marker(sample)
     logger.debug(f"Marker raw output length: {len(raw_text) if raw_text else 0}")
-    
+
     processed_text = marker_text_postprocessing(raw_text)
     logger.info(f"Marker processing completed, final text length: {len(processed_text) if processed_text else 0}")
     logger.debug(f"Marker result preview: {processed_text[:200] if processed_text else 'Empty'}...")
-    
+
     sample['text'] = processed_text
     sample['processor_used'] = 'marker'
     return sample
@@ -216,12 +216,12 @@ def send_to_qwen_vl_25_map(sample):
     raw_text = send_to_qwen_vl_25(sample)
     logger.info(f"VLM raw output length: {len(raw_text) if raw_text else 0}")
     logger.info(f"VLM raw output: {repr(raw_text)}")
-    
+
     processed_text = vlm_text_postprocessing(raw_text)
     logger.info(f"VLM processing completed, final text length: {len(processed_text) if processed_text else 0}")
     logger.info(f"VLM final output: {repr(processed_text)}")
     logger.debug(f"VLM result preview: {processed_text[:200] if processed_text else 'Empty'}...")
-    
+
     sample['text'] = processed_text
     sample['processor_used'] = 'vlm'
     return sample
@@ -229,7 +229,7 @@ def send_to_qwen_vl_25_map(sample):
 
 def predict_processor_map(sample):
     logger.debug(f"Processing sample for classification: {type(sample)}")
-    
+
     try:
         # Row dict değilse; string ise JSON parse etmeyi dene, değilse sar
         if not isinstance(sample, dict):
@@ -248,7 +248,7 @@ def predict_processor_map(sample):
 
         predictions_col = sample.get('predictions')
         logger.debug(f"Predictions column type: {type(predictions_col)}")
-        
+
         labels_list = []
         if not predictions_col:
             logger.warning("No predictions column found, setting processor to NOT_FOUND")
@@ -257,7 +257,7 @@ def predict_processor_map(sample):
 
         data = json.loads(predictions_col) if isinstance(predictions_col, str) else predictions_col
         logger.debug(f"Parsed data type: {type(data)}")
-        
+
         if isinstance(data, dict):
             labels_list = data.get('labels', [])
             logger.debug(f"Extracted labels from dict: {len(labels_list)} items")
@@ -273,10 +273,10 @@ def predict_processor_map(sample):
         original_count = len(labels_list)
         labels_list = [l for l in labels_list if isinstance(l, dict) and float(l.get('confidence', 0.0)) >= THRESH]
         logger.debug(f"Filtered labels by confidence >= {THRESH}: {original_count} -> {len(labels_list)}")
-        
+
         processor = predict_processor(labels_list)
         sample['processor'] = processor.value
-        
+
         # Set processor_used based on classification
         if processor == ProcessorLabel.MARKER:
             sample['processor_used'] = 'marker'
@@ -284,9 +284,9 @@ def predict_processor_map(sample):
             sample['processor_used'] = 'vlm'
         else:
             sample['processor_used'] = 'none'
-            
+
         logger.info(f"Sample classified as: {processor.name} ({processor.value}) -> processor_used: {sample['processor_used']}")
-        
+
     except (json.JSONDecodeError, TypeError, ValueError) as e:
         # sample burada dict olduğuna emin değilsek, korumalı erişelim
         try:
@@ -354,7 +354,7 @@ class PDFRouter:
         logger.info(f"Max model length: {max_model_len}")
         logger.info(f"VLM batch size: {vlm_batch_size}")
         logger.info(f"Buffer size: {buffer_size}")
-        
+
         self.model_name = model_name
         self.debug = debug
         self.use_marker = use_marker
@@ -391,7 +391,8 @@ class PDFRouter:
         logger.info("=" * 60)
 
     def process_splits(self, ds_name, output_ds_name, start_from_split=None, until_split=None,
-                       limit=None, streaming=False, num_proc=2, skip_existing=True, push_mode="overwrite"):
+                       limit=None, streaming=False, num_proc=2, skip_existing=True, push_mode="overwrite",
+                       push_while_streaming=False):
         """
         skip_existing: True ise, çıktı reposunda zaten bulunan split'leri atlar.
         push_mode: "overwrite" -> split'i tamamen değiştirir; "append" -> varsa eski split ile birleştirir (basit dedup).
@@ -516,7 +517,7 @@ class PDFRouter:
                             processed.append(vllm_done)
                     except Exception as e:
                         logger.error(f"VLM stage failed for split '{split_name}': {e}")
-                
+
                 elif not self.use_vllm and hasattr(vllm_ds, '__len__') and len(vllm_ds) > 0:
                     # HTTP client processing for batch mode
                     try:
@@ -580,9 +581,9 @@ class PDFRouter:
                     nonlocal vlm_imgs, vlm_rows, out_batch
                     if not vlm_imgs:
                         return
-                    
+
                     logger.info(f"Flushing VLM batch with {len(vlm_imgs)} images...")
-                    
+
                     if self.use_vllm:
                         # Local vLLM processing
                         fallback_user = (
@@ -604,11 +605,11 @@ class PDFRouter:
                             text = send_to_qwen_vl_25(sample)
                             processed_text = vlm_text_postprocessing(text)
                             texts.append(processed_text)
-                    
+
                     for r, t in zip(vlm_rows, texts):
                         r['text'] = t
                         out_batch.append(r)
-                    
+
                     logger.info(f"VLM batch flushed, processed {len(texts)} samples")
                     vlm_imgs, vlm_rows = [], []
 
@@ -616,7 +617,15 @@ class PDFRouter:
                     nonlocal out_batch, results_chunks
                     if not out_batch:
                         return
-                    results_chunks.append(datasets.Dataset.from_list(out_batch))
+                    chunk = datasets.Dataset.from_list(out_batch)
+                    results_chunks.append(chunk)
+                    # Optional: push each chunk as it is materialized
+                    if push_while_streaming:
+                        try:
+                            datasets.DatasetDict({split_name: chunk}).push_to_hub(repo_id=output_ds_name, private=False)
+                            logger.info(f"✅ Pushed streaming chunk for '{split_name}' ({len(chunk)} rows)")
+                        except Exception as e:
+                            logger.error(f"Push chunk failed for '{split_name}': {e}")
                     out_batch = []
 
                 for row in ds:
@@ -640,7 +649,7 @@ class PDFRouter:
                             vlm_rows.append(row)
                             if len(vlm_imgs) >= self.vlm_batch_size:
                                 flush_vlm()
-                    
+
                     elif not self.use_vllm and proc == ProcessorLabel.QWEN_VL_25.value:
                         # HTTP client processing - process immediately
                         if not has_image:
@@ -698,5 +707,3 @@ class PDFRouter:
                     logger.error(f"Push failed (arg error). Use DatasetDict push. Error: {e}")
                 except Exception as e:
                     logger.error(f"Push failed. Error: {e}")
-
-

@@ -35,6 +35,7 @@ def main():
     until_split      = cfg.get('until_split')            # name or int
     skip_existing    = bool(cfg.get('skip_existing', True))
     push_mode        = cfg.get('push_mode', 'overwrite') # or "append"
+    push_while_streaming = bool(cfg.get('push_while_streaming', False))
     vlm_batch_size    = int(cfg.get("vlm_batch_size", 8))
     buffer_size       = int(cfg.get("buffer_size", 256))
     tps               = int(cfg.get("tensor_parallel_size", 2))
@@ -54,6 +55,7 @@ def main():
     logger.info(f"  Until split: {until_split}")
     logger.info(f"  Skip existing: {skip_existing}")
     logger.info(f"  Push mode: {push_mode}")
+    logger.info(f"  Push while streaming: {push_while_streaming}")
     logger.info(f"  VLM batch size: {vlm_batch_size}")
     logger.info(f"  Buffer size: {buffer_size}")
     logger.info(f"  Tensor parallel size: {tps}")
@@ -88,6 +90,7 @@ def main():
         num_proc=cfg.get("n_proc", 4),
         skip_existing=skip_existing,
         push_mode=push_mode,
+        push_while_streaming=push_while_streaming,
     )
     logger.info("✅ PDF Router processing completed!")
     logger.info("=" * 80)
