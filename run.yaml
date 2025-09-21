@@ -1,6 +1,6 @@
 model_name: "Qwen/Qwen2.5-VL-72B-Instruct"
 ds_name: "orcn/predictions"
-output_ds_name: "sghosts/ahmed_processed"
+output_ds_name: "sghosts/processed"
 
 # işleme seçenekleri
 use_vlm: false
@@ -8,10 +8,11 @@ use_marker: true
 debug: false
 
 # streaming = indirildikçe işle (tam istediğin)
-streaming: false          # 🔴 kritik
-skip_existing: false     # TEST: tüm split'leri işle
-push_mode: overwrite     # split bitince tek commit
-#limit: 2000               # TEST: sadece 10 sample işle
+streaming: true            # indirildikçe işle
+push_while_streaming: true # her chunk'ı anında pushla
+skip_existing: false       # tüm split'leri işle
+push_mode: append          # chunk bazlı incremental push
+limit: null                # tüm satırları işle (ya da kaldır)
 
 # performans/ram ayarları
 vlm_batch_size: 8        # VLM'e mini-batch
@@ -23,5 +24,5 @@ max_model_len: 16384
 # isteğe bağlı:
 # start_from_split: 0     # ya da "config-adi"
 # until_split: null
-n_proc: 8               # streaming=True iken num_proc kullanılmaz (HF kısıtı)
+#n_proc: 8               # streaming=True iken num_proc kullanılmaz (HF kısıtı)
 
