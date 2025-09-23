@@ -20,7 +20,7 @@ buffer_size: 256         # RAM'de geçici sonuç tamponu
 tensor_parallel_size: 4  # 2 GPU kullanıyorsan 2; tek GPU ise 1 yap
 gpu_memory_utilization: 0.8
 max_model_len: 16384
-
+chunk_split_naming: timestamp
 # isteğe bağlı:
 # start_from_split: 0     # ya da "config-adi"
 # until_split: null

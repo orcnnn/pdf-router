@@ -127,7 +127,7 @@ def send_to_qwen_vl_25(sample):
         # Resize image to reduce token count
         img = sample['images']
         if img.size[0] > 512 or img.size[1] > 512:
-            img = img.resize((512, 512), Image.Resampling.LANCZOS)
+            img = img.resize((1654, 2340), Image.Resampling.LANCZOS)
             logger.debug(f"Image resized to {img.size}")
 
         buffered = BytesIO()
@@ -392,7 +392,7 @@ class PDFRouter:
 
     def process_splits(self, ds_name, output_ds_name, start_from_split=None, until_split=None,
                        limit=None, streaming=False, num_proc=2, skip_existing=True, push_mode="overwrite",
-                       push_while_streaming=False):
+                       push_while_streaming=False, chunk_split_naming="same"):
         """
         skip_existing: True ise, çıktı reposunda zaten bulunan split'leri atlar.
         push_mode: "overwrite" -> split'i tamamen değiştirir; "append" -> varsa eski split ile birleştirir (basit dedup).
@@ -576,6 +576,42 @@ class PDFRouter:
                 results_chunks = []     # list[Dataset] partial chunks to keep RAM low
                 vlm_imgs, vlm_rows = [], []
                 seen = 0
+                
+                # Thesis ID tracking for timestamp-based pushing
+                current_thesis_id = None
+                thesis_batch = []       # accumulated data for current thesis_id
+
+                def push_thesis_batch(thesis_id_value):
+                    """Push accumulated data for a thesis_id with timestamp when thesis changes"""
+                    nonlocal thesis_batch, results_chunks
+                    if not thesis_batch:
+                        return
+                    
+                    logger.info(f"Pushing thesis batch for thesis_id={thesis_id_value} with {len(thesis_batch)} samples")
+                    
+                    # Create dataset from thesis batch
+                    chunk = datasets.Dataset.from_list(thesis_batch)
+                    results_chunks.append(chunk)
+                    
+                    # Push with timestamp naming
+                    try:
+                        import datetime
+                        timestamp = datetime.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
+                        split_target = f"{split_name}_{thesis_id_value}_{timestamp}"
+                        
+                        # Push the chunk to HuggingFace Hub
+                        datasets.DatasetDict({split_target: chunk}).push_to_hub(
+                            repo_id=output_ds_name, 
+                            private=False
+                        )
+                        
+                        logger.info(f"✅ Successfully pushed thesis batch to split '{split_target}' ({len(chunk)} rows)")
+                        
+                    except Exception as e:
+                        logger.error(f"Failed to push thesis batch for thesis_id={thesis_id_value}: {e}")
+                    
+                    # Clear the thesis batch for the next thesis
+                    thesis_batch = []
 
                 def flush_vlm():
                     nonlocal vlm_imgs, vlm_rows, out_batch
@@ -608,7 +644,7 @@ class PDFRouter:
 
                     for r, t in zip(vlm_rows, texts):
                         r['text'] = t
-                        out_batch.append(r)
+                        thesis_batch.append(r)
 
                     logger.info(f"VLM batch flushed, processed {len(texts)} samples")
                     vlm_imgs, vlm_rows = [], []
@@ -622,8 +658,37 @@ class PDFRouter:
                     # Optional: push each chunk as it is materialized
                     if push_while_streaming:
                         try:
-                            datasets.DatasetDict({split_name: chunk}).push_to_hub(repo_id=output_ds_name, private=False)
-                            logger.info(f"✅ Pushed streaming chunk for '{split_name}' ({len(chunk)} rows)")
+                            # choose target split name for chunk
+                            if chunk_split_naming == "timestamp":
+                                import datetime
+                                split_target = f"{split_name}_{datetime.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}"
+                            elif chunk_split_naming == "increment":
+                                split_target = f"{split_name}_{len(results_chunks):06d}"
+                            else:
+                                split_target = split_name
+
+                            if push_mode == "append" and split_target == split_name:
+                                try:
+                                    old = datasets.load_dataset(output_ds_name, split=split_target)
+                                    merged = datasets.concatenate_datasets([old, chunk])
+
+                                    seen_set = set()
+
+                                    def _dedup(row):
+                                        k = row.get("thesis_id") or row.get("id")
+                                        if k in seen_set:
+                                            return False
+                                        seen_set.add(k)
+                                        return True
+
+                                    merged = merged.filter(_dedup)
+                                    datasets.DatasetDict({split_target: merged}).push_to_hub(repo_id=output_ds_name, private=False)
+                                except Exception:
+                                    datasets.DatasetDict({split_target: chunk}).push_to_hub(repo_id=output_ds_name, private=False)
+                            else:
+                                # For timestamp/increment naming or overwrite mode, just push chunk to a unique split
+                                datasets.DatasetDict({split_target: chunk}).push_to_hub(repo_id=output_ds_name, private=False)
+                            logger.info(f"✅ Pushed streaming chunk to split '{split_target}' ({len(chunk)} rows), mode={push_mode}")
                         except Exception as e:
                             logger.error(f"Push chunk failed for '{split_name}': {e}")
                     out_batch = []
@@ -633,13 +698,25 @@ class PDFRouter:
                     proc = row.get('processor') if isinstance(row, dict) else ProcessorLabel.NOT_FOUND.value
 
                     has_image = isinstance(row, dict) and ('images' in row) and (row['images'] is not None)
+                    
+                    # Check for thesis_id change and push previous batch if needed
+                    if isinstance(row, dict):
+                        row_thesis_id = row.get('thesis_id') or row.get('id')
+                        if row_thesis_id and current_thesis_id is not None and row_thesis_id != current_thesis_id:
+                            # Thesis ID changed, push the previous batch
+                            logger.info(f"Thesis ID changed from {current_thesis_id} to {row_thesis_id}")
+                            push_thesis_batch(current_thesis_id)
+                        
+                        # Update current thesis ID
+                        if row_thesis_id:
+                            current_thesis_id = row_thesis_id
 
                     if self.use_marker and proc == ProcessorLabel.MARKER.value:
                         if not has_image:
                             logger.warning("Row has no 'images' for MARKER; skipping.")
                         else:
                             row = send_to_marker_map(row)
-                            out_batch.append(row)
+                            thesis_batch.append(row)
 
                     elif self.use_vllm and proc == ProcessorLabel.QWEN_VL_25.value:
                         if not has_image:
@@ -657,13 +734,9 @@ class PDFRouter:
                         else:
                             logger.info("Processing VLM sample with HTTP client...")
                             row = send_to_qwen_vl_25_map(row)
-                            out_batch.append(row)
+                            thesis_batch.append(row)
 
                     # else: NOT_FOUND veya diğer sınıflar → şimdilik atlıyoruz
-
-                    if len(out_batch) >= self.buffer_size:
-                        flush_vlm()
-                        flush_out_batch()
 
                     seen += 1
                     if (limit is not None) and (seen >= limit):
@@ -672,38 +745,12 @@ class PDFRouter:
                 # final flush
                 flush_vlm()
                 flush_out_batch()
+                
+                # Push final thesis batch if any remains
+                if current_thesis_id and thesis_batch:
+                    logger.info(f"Pushing final thesis batch for thesis_id={current_thesis_id}")
+                    push_thesis_batch(current_thesis_id)
 
                 if not results_chunks:
                     logger.warning(f"No processed samples for split '{split_name}'.")
                     continue
-
-                final_ds = results_chunks[0] if len(results_chunks) == 1 else datasets.concatenate_datasets(results_chunks)
-
-                try:
-                    if push_mode == "append":
-                        try:
-                            old = datasets.load_dataset(output_ds_name, split=split_name)
-                            merged = datasets.concatenate_datasets([old, final_ds])
-
-                            seen_set = set()
-
-                            def _dedup(row):
-                                k = row.get("thesis_id") or row.get("id")
-                                if k in seen_set:
-                                    return False
-                                seen_set.add(k)
-                                return True
-
-                            merged = merged.filter(_dedup)
-                            datasets.DatasetDict({split_name: merged}).push_to_hub(repo_id=output_ds_name, private=False)
-                        except Exception:
-                            datasets.DatasetDict({split_name: final_ds}).push_to_hub(repo_id=output_ds_name, private=False)
-                    else:
-                        datasets.DatasetDict({split_name: final_ds}).push_to_hub(repo_id=output_ds_name, private=False)
-
-                    duration = (time.time() - start_time) / 60
-                    logger.info(f"✅ Successfully processed (stream) and pushed split '{split_name}' in {duration:.2f} minutes.")
-                except TypeError as e:
-                    logger.error(f"Push failed (arg error). Use DatasetDict push. Error: {e}")
-                except Exception as e:
-                    logger.error(f"Push failed. Error: {e}")
