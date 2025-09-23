@@ -582,7 +582,7 @@ class PDFRouter:
                 thesis_batch = []       # accumulated data for current thesis_id
 
                 def push_thesis_batch(thesis_id_value):
-                    """Push accumulated data for a thesis_id with timestamp when thesis changes"""
+                    """Push accumulated data for a thesis_id to a separate timestamp-based split"""
                     nonlocal thesis_batch, results_chunks
                     if not thesis_batch:
                         return
@@ -593,19 +593,22 @@ class PDFRouter:
                     chunk = datasets.Dataset.from_list(thesis_batch)
                     results_chunks.append(chunk)
                     
-                    # Push with timestamp naming
+                    # Create separate split for this thesis with timestamp
                     try:
                         import datetime
                         timestamp = datetime.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
+                        
+                        # Create unique split name: splitname_thesisid_timestamp
                         split_target = f"{split_name}_{thesis_id_value}_{timestamp}"
                         
-                        # Push the chunk to HuggingFace Hub
+                        # Push to the unique split
                         datasets.DatasetDict({split_target: chunk}).push_to_hub(
                             repo_id=output_ds_name, 
                             private=False
                         )
                         
-                        logger.info(f"✅ Successfully pushed thesis batch to split '{split_target}' ({len(chunk)} rows)")
+                        logger.info(f"✅ Successfully pushed thesis_id={thesis_id_value} to split '{split_target}' ({len(chunk)} rows)")
+                        logger.info(f"📝 Completed thesis_id={thesis_id_value} at {timestamp}")
                         
                     except Exception as e:
                         logger.error(f"Failed to push thesis batch for thesis_id={thesis_id_value}: {e}")
@@ -650,48 +653,9 @@ class PDFRouter:
                     vlm_imgs, vlm_rows = [], []
 
                 def flush_out_batch():
-                    nonlocal out_batch, results_chunks
-                    if not out_batch:
-                        return
-                    chunk = datasets.Dataset.from_list(out_batch)
-                    results_chunks.append(chunk)
-                    # Optional: push each chunk as it is materialized
-                    if push_while_streaming:
-                        try:
-                            # choose target split name for chunk
-                            if chunk_split_naming == "timestamp":
-                                import datetime
-                                split_target = f"{split_name}_{datetime.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}"
-                            elif chunk_split_naming == "increment":
-                                split_target = f"{split_name}_{len(results_chunks):06d}"
-                            else:
-                                split_target = split_name
-
-                            if push_mode == "append" and split_target == split_name:
-                                try:
-                                    old = datasets.load_dataset(output_ds_name, split=split_target)
-                                    merged = datasets.concatenate_datasets([old, chunk])
-
-                                    seen_set = set()
-
-                                    def _dedup(row):
-                                        k = row.get("thesis_id") or row.get("id")
-                                        if k in seen_set:
-                                            return False
-                                        seen_set.add(k)
-                                        return True
-
-                                    merged = merged.filter(_dedup)
-                                    datasets.DatasetDict({split_target: merged}).push_to_hub(repo_id=output_ds_name, private=False)
-                                except Exception:
-                                    datasets.DatasetDict({split_target: chunk}).push_to_hub(repo_id=output_ds_name, private=False)
-                            else:
-                                # For timestamp/increment naming or overwrite mode, just push chunk to a unique split
-                                datasets.DatasetDict({split_target: chunk}).push_to_hub(repo_id=output_ds_name, private=False)
-                            logger.info(f"✅ Pushed streaming chunk to split '{split_target}' ({len(chunk)} rows), mode={push_mode}")
-                        except Exception as e:
-                            logger.error(f"Push chunk failed for '{split_name}': {e}")
-                    out_batch = []
+                    # This function is now disabled since we use thesis-based batching
+                    # All data goes through push_thesis_batch() instead
+                    pass
 
                 for row in ds:
                     row = predict_processor_map(row)
@@ -702,14 +666,21 @@ class PDFRouter:
                     # Check for thesis_id change and push previous batch if needed
                     if isinstance(row, dict):
                         row_thesis_id = row.get('thesis_id') or row.get('id')
-                        if row_thesis_id and current_thesis_id is not None and row_thesis_id != current_thesis_id:
-                            # Thesis ID changed, push the previous batch
-                            logger.info(f"Thesis ID changed from {current_thesis_id} to {row_thesis_id}")
-                            push_thesis_batch(current_thesis_id)
                         
-                        # Update current thesis ID
                         if row_thesis_id:
-                            current_thesis_id = row_thesis_id
+                            if current_thesis_id is None:
+                                # First thesis_id encountered
+                                current_thesis_id = row_thesis_id
+                                logger.info(f"🆕 Starting new thesis: {current_thesis_id}")
+                            elif row_thesis_id != current_thesis_id:
+                                # Thesis ID changed, push the previous batch
+                                logger.info(f"🔄 Thesis ID changed from {current_thesis_id} to {row_thesis_id}")
+                                logger.info(f"📦 Accumulated {len(thesis_batch)} samples for thesis {current_thesis_id}")
+                                push_thesis_batch(current_thesis_id)
+                                current_thesis_id = row_thesis_id
+                                logger.info(f"🆕 Starting new thesis: {current_thesis_id}")
+                        else:
+                            logger.warning(f"⚠️ Row has no thesis_id or id field: {list(row.keys())}")
 
                     if self.use_marker and proc == ProcessorLabel.MARKER.value:
                         if not has_image:
@@ -748,8 +719,12 @@ class PDFRouter:
                 
                 # Push final thesis batch if any remains
                 if current_thesis_id and thesis_batch:
-                    logger.info(f"Pushing final thesis batch for thesis_id={current_thesis_id}")
+                    logger.info(f"🏁 Pushing final thesis batch for thesis_id={current_thesis_id} ({len(thesis_batch)} samples)")
                     push_thesis_batch(current_thesis_id)
+                elif current_thesis_id:
+                    logger.info(f"ℹ️ Final thesis {current_thesis_id} has no samples to push")
+                else:
+                    logger.info("ℹ️ No thesis data processed")
 
                 if not results_chunks:
                     logger.warning(f"No processed samples for split '{split_name}'.")
